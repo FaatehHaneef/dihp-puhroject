@@ -1,0 +1,81 @@
+{
+  "drake_no": {
+    "image": "drake_no.jpg",
+    "type": "image",
+    "triggers": {
+      "fingers_extended": ">=4",
+      "face_looking_down": true,
+      "hand_raised": true
+    },
+    "priority": 2
+  },
+  "drake_yes": {
+    "image": "drake_yes.jpg",
+    "type": "image",
+    "triggers": {
+      "fingers_extended": ">=3",
+      "face_looking_up": true,
+      "hand_raised": true
+    },
+    "priority": 2
+  },
+  "thinking_monkey": {
+    "image": "thinking_monkey.jpg",
+    "type": "image",
+    "triggers": {
+      "finger_near_lip": true,
+      "fingers_extended": "1",
+      "head_tilt": ">10"
+    },
+    "priority": 1
+  },
+  "distracted_boyfriend": {
+    "image": "distracted_boyfriend.jpg",
+    "type": "image",
+    "triggers": {
+      "head_turned_right": true,
+      "gaze_direction": "right"
+    },
+    "priority": 1
+  },
+  "this_is_fine": {
+    "image": "this_is_fine.jpg",
+    "type": "image",
+    "triggers": {
+      "both_hands_relaxed": true,
+      "face_neutral": true,
+      "mouth_closed": true
+    },
+    "priority": 1
+  },
+  "woman_yelling_at_cat": {
+    "image": "woman_yelling_at_cat.jpg",
+    "type": "image",
+    "triggers": {
+      "mouth_open": true,
+      "finger_pointing": true,
+      "arms_raised": false
+    },
+    "priority": 1
+  },
+  "surprised_pikachu": {
+    "image": "surprised_pikachu.jpg",
+    "type": "image",
+    "triggers": {
+      "mouth_open_wide": true,
+      "both_hands_low": true,
+      "eyebrows_raised": true
+    },
+    "priority": 1
+  },
+  "side_eye_chloe": {
+    "image": "side_eye_chloe.jpg",
+    "type": "image",
+    "triggers": {
+      "head_turned": true,
+      "gaze_offset": true,
+      "mouth_neutral": true
+    },
+    "priority": 1
+  }
+}

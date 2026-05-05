@@ -1,0 +1,310 @@
+================================================================================
+POSEMEME — DIP PROJECT: FULL CONTEXT & IMPLEMENTATION PLAN
+================================================================================
+
+PROJECT OVERVIEW
+================================================================================
+PoseMeme is a real-time webcam application that detects user body poses, hand 
+gestures, and facial expressions using classical image processing techniques, 
+then matches the detected state to a predefined meme database and displays the 
+matched meme image in a separate popup window.
+
+Think of it as a meme recognition mirror — you strike a pose, it knows the meme.
+
+HARD CONSTRAINTS (NON-NEGOTIABLE)
+================================================================================
+• Language: Python only
+• Core library: OpenCV (cv2) as the primary engine
+• DIP principles must be implemented manually — no skipping to high-level ML 
+  calls. Where MediaPipe gives landmarks, we do the math on top using classical 
+  DIP.
+• No training custom neural networks. MediaPipe is allowed purely as a landmark 
+  extractor (skeleton provider), not as a classifier.
+• All gesture/pose classification logic must be built from scratch using 
+  geometry, morphology, color, and spatial analysis.
+
+TECH STACK
+================================================================================
+Layer               Tool                    Role
+────────────────────────────────────────────────────────────────────────────
+Camera input        cv2.VideoCapture        Live webcam feed
+Landmark extraction MediaPipe Holistic      Face mesh + hand + pose landmarks
+DIP processing      OpenCV + NumPy          All custom logic lives here
+Meme display        cv2.imshow              Separate window popup
+Config/meme DB      JSON + local folder     Meme registry
+
+ARCHITECTURE OVERVIEW
+================================================================================
+
+Webcam Frame
+     │
+     ▼
+Preprocessing Pipeline
+  - Gaussian blur (noise reduction)
+  - Histogram equalization (lighting normalization)
+  - Color space conversion (BGR → HSV / YCbCr)
+     │
+     ▼
+Region Segmentation
+  - Skin color segmentation (HSV thresholding) → isolate hands + face
+  - Morphological ops (erode/dilate/open/close) → clean masks
+  - Connected Component Analysis → label blobs, extract hand & face regions
+     │
+     ▼
+Landmark Extraction (MediaPipe)
+  - Hand landmarks (21 points per hand)
+  - Face mesh landmarks
+  - Pose landmarks (body keypoints)
+     │
+     ▼
+Feature Computation (Custom DIP Logic)
+  - Finger state detection (extended/curled) via landmark distances
+  - Convex hull of hand blob → shape descriptor
+  - Face orientation estimation (looking left/right/down/up)
+  - Lip-to-finger distance (Euclidean on landmark coords)
+  - Head tilt angle (from face mesh keypoints)
+  - Body posture vector (shoulder-to-hip angles)
+     │
+     ▼
+Meme Matching Engine
+  - Rule-based classifier using computed features
+  - Each meme has a feature signature (JSON config)
+  - Confidence scoring via weighted feature overlap
+     │
+     ▼
+Output
+  - Main window: live feed with debug overlay (landmarks, masks, labels)
+  - Popup window: matched meme image (cv2.imshow second window)
+  - Console: matched meme name + confidence score
+
+CORE DIP MODULES TO IMPLEMENT (MANUAL/CUSTOM)
+================================================================================
+
+1. PREPROCESSING (preprocessing.py)
+   ─────────────────────────────────
+   • Per-frame histogram equalization on luminance channel
+   • Adaptive Gaussian blur based on frame brightness variance
+   • Color space conversion utilities (BGR↔HSV, BGR↔YCbCr)
+
+2. SKIN SEGMENTATION (segmentation.py)
+   ────────────────────────────────────
+   • Manual HSV range thresholding for skin detection (tune H/S/V bounds)
+   • Binary mask generation
+   • Morphological pipeline: Opening → Closing → Dilation to clean mask
+   • Connected Component Analysis to extract:
+     - Two largest blobs (left hand, right hand)
+     - Face region
+
+3. HAND SHAPE ANALYSIS (hand_analysis.py)
+   ───────────────────────────────────────
+   • Convex hull computation on hand blob contour (cv2.convexHull)
+   • Convexity defects for finger gap detection (cv2.convexityDefects)
+   • Finger extension classifier using landmark Y-coordinate comparison 
+     (tip vs. PIP joint)
+   • Finger count extraction
+
+4. FACE ANALYSIS (face_analysis.py)
+   ────────────────────────────────
+   • Nose-to-eye vector for head tilt angle
+   • Lip landmark centroid vs. chin landmark for mouth open/close state
+   • Gaze direction estimate from iris landmarks relative to eye corners
+
+5. POSE ANALYSIS (pose_analysis.py)
+   ────────────────────────────────
+   • Shoulder midpoint vs. head position for slouch/lean detection
+   • Wrist-to-face vector for "hand near face" detection
+   • Body symmetry score (are both arms doing the same thing?)
+
+MEME DATABASE STRUCTURE
+================================================================================
+
+Directory: posememe/memes/
+├── drake_no.jpg
+├── thinking_monkey.jpg
+├── distracted_boyfriend.jpg
+├── this_is_fine.jpg
+└── ...
+
+File: meme_config.json
+{
+  "drake_no": {
+    "image": "drake_no.jpg",
+    "type": "image",
+    "triggers": {
+      "fingers_extended": ">=4",
+      "face_looking_down": true,
+      "hand_raised": true
+    },
+    "priority": 2
+  },
+  "thinking_monkey": {
+    "image": "thinking_monkey.jpg",
+    "type": "image",
+    "triggers": {
+      "finger_near_lip": true,
+      "fingers_extended": "1",
+      "head_tilt": ">10"
+    },
+    "priority": 1
+  }
+}
+
+MEME TRIGGERS TO IMPLEMENT (START WITH THESE)
+================================================================================
+
+Meme                    Key Signals
+──────────────────────────────────────────────────────────────────────────────
+Drake No / Drake Yes    Hand raised + face looking down vs. up
+Thinking Monkey         Index finger near lip, slight head tilt
+Distracted Boyfriend    Head turned sharply sideways
+This Is Fine            Both hands relaxed, slight smile, neutral pose
+Woman Yelling at Cat    Mouth open, finger pointing forward
+Surprised Pikachu       Mouth open wide, both hands low
+Side Eye Chloe          Face turned, only eyes shifted (iris offset)
+
+MEME POPUP IMPLEMENTATION (CRITICAL DETAIL)
+================================================================================
+
+• Separate cv2.imshow window (NOT overlay on main feed)
+• Use cv2.moveWindow positioning for side-by-side display with main window
+• DEBOUNCING: 1.5–2 second hold timer, no flicker on every frame
+  - Once a meme is matched, lock it for ~1.5 seconds before switching
+  - Use frame counter or time.time() check
+• Support images + video (loop video clips while pose holds)
+  - Images: single frame display
+  - Videos: read next frame each iteration, reset to frame 0 on trigger
+• Graceful dismissal when pose breaks (fade or just close after timer expires)
+• Window naming convention: "Meme" for imshow calls
+
+FILE STRUCTURE
+================================================================================
+
+src/
+├── main.py                      # Entry point, camera loop
+├── preprocessing.py             # Histogram eq, blur, color conversion
+├── segmentation.py              # Skin mask, morphological ops, CCA
+├── hand_analysis.py             # Convex hull, finger state, gesture features
+├── face_analysis.py             # Head pose, mouth state, gaze
+├── pose_analysis.py             # Body keypoints, posture vectors
+├── meme_matcher.py              # Rule engine, confidence scoring
+├── display.py                   # Window management, overlays
+├── meme_config.json             # Trigger definitions (JSON)
+└── memes/                       # Meme image assets
+    ├── drake_no.jpg
+    ├── thinking_monkey.jpg
+    ├── distracted_boyfriend.jpg
+    ├── this_is_fine.jpg
+    └── ...
+
+IMPLEMENTATION PHASES
+================================================================================
+
+Phase 1 — Foundation
+  Get camera feed running, preprocessing pipeline working, skin segmentation 
+  producing clean masks, basic landmark overlay visible on screen.
+
+Phase 2 — Feature Extraction
+  Implement finger counter, face orientation, lip-to-finger distance. Validate 
+  each feature with printed debug output before hooking into matching.
+
+Phase 3 — Meme Matching
+  Build the rule engine. Start with 3 memes, get reliable triggers, then 
+  expand. Tune thresholds per meme.
+
+Phase 4 — Display & Polish
+  Second window for meme popup, smooth transition (don't flicker on every 
+  frame — use a hold timer so the meme stays for ~1.5 seconds minimum), add 
+  confidence score overlay.
+
+Phase 5 — Demo Prep
+  Record a short demo video. Add at least 7-8 memes. Clean up debug overlays. 
+  Prepare the academic justification mapping each module to course DIP concepts.
+
+DIP CONCEPT COVERAGE MAP
+================================================================================
+
+Course Topic                Where It's Used
+─────────────────────────────────────────────────────────────────────────────
+Spatial filtering           Gaussian blur preprocessing
+Histogram equalization      Lighting normalization per frame
+Color image processing      HSV skin segmentation
+Morphological operations    Mask cleaning (open/close/dilate)
+Connected component analysis Isolating hand/face blobs
+Edge detection              Hand contour extraction
+Convex hull                 Hand shape descriptor
+Feature extraction          Finger state, head angle, distances
+Spatial relationships       Lip-to-finger, wrist-to-face vectors
+
+MODULE DESCRIPTIONS
+================================================================================
+
+main.py
+  Entry point. Manages the main camera loop at ~30fps.
+  - Initialize camera (cv2.VideoCapture(0))
+  - Load MediaPipe Holistic
+  - Load meme database from JSON
+  - Main loop: capture frame → preprocess → segment → extract landmarks → 
+    extract features → match meme → display
+  - Handle window events (ESC to quit)
+
+preprocessing.py
+  Image preprocessing utilities.
+  - histogram_equalize(frame): Luminance channel equalization
+  - adaptive_blur(frame): Gaussian blur with variance-based kernel
+  - bgr_to_hsv(frame): Color space conversion
+  - bgr_to_ycbcr(frame): Color space conversion
+  - normalize_brightness(frame): Lighting normalization
+
+segmentation.py
+  Skin detection and morphological processing.
+  - get_skin_mask(frame): HSV thresholding for skin
+  - apply_morphology(mask): Opening, closing, dilation pipeline
+  - connected_component_analysis(mask): Label blobs, extract hand + face regions
+  - extract_hand_regions(mask): Return left + right hand contours/blobs
+  - extract_face_region(mask): Return face blob
+
+hand_analysis.py
+  Hand gesture and shape analysis.
+  - get_convex_hull(hand_blob): Compute convex hull
+  - get_convexity_defects(hull, contour): Finger gaps
+  - compute_finger_state(landmarks, hand_side): Extended/curled per finger
+  - count_fingers(landmarks, hand_side): Total finger count
+  - get_hand_shape_features(hull, contour, landmarks): Descriptor vector
+
+face_analysis.py
+  Facial feature extraction.
+  - compute_head_tilt_angle(face_landmarks): Degrees from vertical
+  - is_mouth_open(face_landmarks): Boolean + openness magnitude
+  - compute_gaze_direction(face_landmarks): Looking left/right/center/up/down
+  - get_face_orientation(face_landmarks): Yaw angle (left/right turn)
+  - lip_to_nose_distance(face_landmarks): Euclidean distance
+
+pose_analysis.py
+  Body posture analysis.
+  - compute_shoulder_angle(pose_landmarks): Posture vector
+  - is_hand_near_face(pose_landmarks, hand_landmarks): Boolean
+  - body_symmetry_score(pose_landmarks): 0–1 (left/right arm similarity)
+  - get_body_posture_vector(pose_landmarks): Feature descriptor
+
+meme_matcher.py
+  Rule-based meme matching engine.
+  - load_meme_config(json_path): Parse meme_config.json
+  - evaluate_triggers(features, meme_triggers): Boolean (triggers met?)
+  - compute_confidence(features, meme_triggers): 0–1 score
+  - match_best_meme(features, meme_db): Return (meme_name, confidence)
+
+display.py
+  Window management and overlay rendering.
+  - draw_landmarks(frame, landmarks): Overlay skeleton
+  - draw_debug_info(frame, features): Text overlays (confidence, labels)
+  - show_main_window(frame): Display main cv2 window
+  - show_meme_popup(meme_img, x, y): Separate meme window with positioning
+  - cleanup_windows(): Destroy all cv2 windows gracefully
+
+meme_config.json
+  JSON database of meme triggers and metadata.
+  Structure: { "meme_name": { "image": "file.jpg", "triggers": {...}, ... } }
+
+================================================================================
+END OF CONTEXT
+================================================================================

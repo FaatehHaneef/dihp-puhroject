@@ -78,9 +78,36 @@ def compute_gaze_direction(face_landmarks):
     Returns:
         String: "left", "right", "center", "up", "down"
     """
-    # TODO: Use iris landmarks relative to eye corners
-    # Iris position within eye bounds → direction
-    return "center"
+    if face_landmarks is None or len(face_landmarks.landmark) < 468:
+        return "center"
+    
+    import math
+    lm = face_landmarks.landmark
+    
+    # Right eye inner/outer corners: 133 (right), 33 (left)
+    # Left eye inner/outer corners: 362 (right), 263 (left)
+    right_eye_inner = lm[133]
+    right_eye_outer = lm[33]
+    left_eye_inner = lm[362]
+    left_eye_outer = lm[263]
+    
+    # Eye centers
+    right_eye_center_x = (right_eye_inner.x + right_eye_outer.x) / 2
+    left_eye_center_x = (left_eye_inner.x + left_eye_outer.x) / 2
+    avg_eye_center_x = (right_eye_center_x + left_eye_center_x) / 2
+    
+    # Estimate iris center (approximate from eye region midpoint)
+    avg_iris_x = (right_eye_center_x + left_eye_center_x) / 2
+    
+    # Determine gaze direction
+    gaze_offset = avg_iris_x - avg_eye_center_x
+    
+    if gaze_offset < -0.05:
+        return "left"
+    elif gaze_offset > 0.05:
+        return "right"
+    else:
+        return "center"
 
 
 def get_face_orientation(face_landmarks):
@@ -97,12 +124,32 @@ def get_face_orientation(face_landmarks):
             "roll": float (degrees)
         }
     """
-    # TODO: Use nose, eye, and mouth landmarks for Euler angles
-    return {
-        "yaw": 0.0,
-        "pitch": 0.0,
-        "roll": 0.0
-    }
+    if face_landmarks is None or len(face_landmarks.landmark) < 468:
+        return {"yaw": 0.0, "pitch": 0.0, "roll": 0.0}
+    
+    import math
+    lm = face_landmarks.landmark
+    
+    # Key landmarks: nose (1), left/right eye outer (33/263), chin (199)
+    nose = lm[1]
+    left_eye = lm[33]
+    right_eye = lm[263]
+    chin = lm[199]
+    
+    # Roll: tilt of eyes relative to horizontal
+    roll = math.atan2(left_eye.y - right_eye.y, left_eye.x - right_eye.x) * 180 / math.pi
+    
+    # Yaw: left-right rotation (nose to eye midpoint horizontal)
+    eye_center_x = (left_eye.x + right_eye.x) / 2
+    yaw_offset = nose.x - eye_center_x
+    yaw = yaw_offset * 180  # Scale to degrees
+    
+    # Pitch: up-down rotation (nose to chin vertical)
+    eye_center_y = (left_eye.y + right_eye.y) / 2
+    pitch_offset = nose.y - eye_center_y
+    pitch = pitch_offset * 180  # Scale to degrees
+    
+    return {"yaw": yaw, "pitch": pitch, "roll": roll}
 
 
 def lip_to_nose_distance(face_landmarks):
@@ -115,8 +162,25 @@ def lip_to_nose_distance(face_landmarks):
     Returns:
         Float: Distance in pixels
     """
-    # TODO: Extract lip and nose landmarks, compute distance
-    return 0.0
+    if face_landmarks is None or len(face_landmarks.landmark) < 300:
+        return 0.0
+    
+    import math
+    lm = face_landmarks.landmark
+    
+    # Nose tip (1), lip center (approximate as average of top/bottom)
+    nose = lm[1]
+    lip_top = lm[61]
+    lip_bottom = lm[291]
+    lip_center_x = (lip_top.x + lip_bottom.x) / 2
+    lip_center_y = (lip_top.y + lip_bottom.y) / 2
+    
+    # Euclidean distance
+    dist = math.sqrt((nose.x - lip_center_x)**2 + (nose.y - lip_center_y)**2)
+    
+    # Normalize by typical face region (~0.4 in normalized coords)
+    normalized_dist = min(dist / 0.4, 1.0)
+    return normalized_dist
 
 
 def lip_to_finger_distance(face_landmarks, hand_landmarks):
@@ -130,10 +194,31 @@ def lip_to_finger_distance(face_landmarks, hand_landmarks):
     Returns:
         Float: Minimum distance in pixels
     """
-    # TODO: Iterate all lip landmarks and hand landmarks, find minimum
     if face_landmarks is None or hand_landmarks is None:
-        return float('inf')
-    return float('inf')
+        return 1.0
+    
+    import math
+    face_lm = face_landmarks.landmark
+    hand_lm = hand_landmarks.landmark
+    
+    # Lip center
+    lip_top = face_lm[61]
+    lip_bottom = face_lm[291]
+    lip_x = (lip_top.x + lip_bottom.x) / 2
+    lip_y = (lip_top.y + lip_bottom.y) / 2
+    
+    # Find minimum distance from any finger tip to lips
+    min_dist = float('inf')
+    finger_tips = [4, 8, 12, 16, 20]  # Thumb, index, middle, ring, pinky tips
+    
+    for tip_idx in finger_tips:
+        tip = hand_lm[tip_idx]
+        dist = math.sqrt((lip_x - tip.x)**2 + (lip_y - tip.y)**2)
+        min_dist = min(min_dist, dist)
+    
+    # Normalize
+    normalized_dist = min(min_dist / 0.2, 1.0)  # 0.2 is typical finger-to-mouth distance
+    return normalized_dist
 
 
 def eye_aspect_ratio(face_landmarks):
@@ -147,5 +232,34 @@ def eye_aspect_ratio(face_landmarks):
     Returns:
         Float: Average EAR of both eyes
     """
-    # TODO: Use eye landmark distances
-    return 1.0
+    if face_landmarks is None or len(face_landmarks.landmark) < 468:
+        return 1.0
+    
+    import math
+    lm = face_landmarks.landmark
+    
+    # Right eye landmarks (upper/lower lids, inner/outer corners)
+    # Using approximations: 33=right corner, 133=left corner, 159=upper lid, 145=lower lid
+    right_p1 = lm[159]  # Top lid
+    right_p2 = lm[145]  # Bottom lid
+    right_p3 = lm[33]   # Right corner
+    right_p4 = lm[133]  # Left corner
+    
+    # Left eye landmarks
+    left_p1 = lm[386]   # Top lid
+    left_p2 = lm[374]   # Bottom lid
+    left_p3 = lm[263]   # Right corner
+    left_p4 = lm[362]   # Left corner
+    
+    def calc_ear(p1, p2, p3, p4):
+        """Calculate EAR for one eye"""
+        vert_dist = math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
+        horiz_dist = math.sqrt((p3.x - p4.x)**2 + (p3.y - p4.y)**2)
+        ear = vert_dist / horiz_dist if horiz_dist > 0 else 0
+        return ear
+    
+    right_ear = calc_ear(right_p1, right_p2, right_p3, right_p4)
+    left_ear = calc_ear(left_p1, left_p2, left_p3, left_p4)
+    avg_ear = (right_ear + left_ear) / 2
+    
+    return avg_ear

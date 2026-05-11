@@ -160,6 +160,21 @@ def compute_hand_angle(landmarks):
     Returns:
         Angle in degrees (0-360)
     """
-    # TODO: Use landmark positions to estimate hand orientation
-    # E.g., wrist to middle finger direction
-    return 0.0
+    if landmarks is None or len(landmarks.landmark) < 13:
+        return 0.0
+    
+    lm = landmarks.landmark
+    
+    # Use wrist (0) to middle finger MCP (9) vector for hand orientation
+    wrist = lm[0]
+    middle_mcp = lm[9]
+    
+    dx = middle_mcp.x - wrist.x
+    dy = middle_mcp.y - wrist.y
+    
+    # Compute angle in degrees (0-360)
+    import math
+    angle = math.atan2(dy, dx) * 180 / math.pi
+    angle = (angle + 360) % 360  # Normalize to 0-360
+    
+    return angle

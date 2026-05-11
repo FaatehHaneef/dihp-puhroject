@@ -24,19 +24,57 @@ def draw_landmarks(frame, landmarks, landmark_type="pose"):
         landmarks: MediaPipe landmarks object
         landmark_type: "pose", "hand", or "face"
     """
+    if landmarks is None:
+        return
+    
     h, w, _ = frame.shape
     
-    if landmark_type == "pose":
-        # TODO: Draw pose skeleton (specific connections for pose)
-        pass
-    elif landmark_type == "hand":
-        # TODO: Draw hand connections
-        pass
-    elif landmark_type == "face":
-        # TODO: Draw face mesh (if needed, can be sparse)
-        pass
+    # Pose skeleton connections
+    pose_connections = [
+        (11, 12), (12, 24), (24, 23), (23, 11),  # Torso
+        (11, 13), (13, 15),  # Right arm
+        (12, 14), (14, 16),  # Left arm
+        (24, 26), (26, 28),  # Right leg
+        (23, 25), (25, 27),  # Left leg
+        (5, 6), (5, 7), (7, 9),  # Right hand
+        (6, 8), (8, 10),  # Left hand
+    ]
     
-    # TODO: Draw circles at each landmark point
+    # Hand skeleton connections
+    hand_connections = [
+        (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
+        (0, 5), (5, 6), (6, 7), (7, 8),  # Index
+        (0, 9), (9, 10), (10, 11), (11, 12),  # Middle
+        (0, 13), (13, 14), (14, 15), (15, 16),  # Ring
+        (0, 17), (17, 18), (18, 19), (19, 20),  # Pinky
+    ]
+    
+    lm = landmarks.landmark
+    
+    # Draw connections
+    if landmark_type == "pose":
+        for start, end in pose_connections:
+            if start < len(lm) and end < len(lm):
+                p1 = lm[start]
+                p2 = lm[end]
+                x1, y1 = int(p1.x * w), int(p1.y * h)
+                x2, y2 = int(p2.x * w), int(p2.y * h)
+                cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    
+    elif landmark_type == "hand":
+        for start, end in hand_connections:
+            if start < len(lm) and end < len(lm):
+                p1 = lm[start]
+                p2 = lm[end]
+                x1, y1 = int(p1.x * w), int(p1.y * h)
+                x2, y2 = int(p2.x * w), int(p2.y * h)
+                cv2.line(frame, (x1, y1), (x2, y2), (255, 0, 0), 1)
+    
+    # Draw circles at each landmark point
+    for i, pt in enumerate(lm):
+        x, y = int(pt.x * w), int(pt.y * h)
+        color = (0, 255, 0) if landmark_type == "pose" else (255, 0, 0)
+        cv2.circle(frame, (x, y), 3, color, -1)
 
 
 def draw_debug_info(frame, features, matched_meme=None, confidence=0.0):
@@ -49,12 +87,43 @@ def draw_debug_info(frame, features, matched_meme=None, confidence=0.0):
         matched_meme: Name of matched meme (or None)
         confidence: Confidence score (0-1)
     """
-    # TODO: Draw text at top-left showing:
-    # - Finger count (left and right)
-    # - Head orientation
-    # - Matched meme name and confidence
-    # - FPS counter
-    pass
+    if features is None:
+        features = {}
+    
+    h, w, _ = frame.shape
+    
+    # Text position and font
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.6
+    thickness = 1
+    color = (0, 255, 0)
+    y_offset = 30
+    x_pos = 10
+    
+    # Draw finger count
+    finger_count = features.get("fingers_extended", 0)
+    cv2.putText(frame, f"Fingers: {finger_count}", (x_pos, y_offset),
+                font, font_scale, color, thickness)
+    y_offset += 25
+    
+    # Draw head orientation
+    head_tilt = features.get("head_tilt_angle", 0.0)
+    cv2.putText(frame, f"Head Tilt: {head_tilt:.1f}°", (x_pos, y_offset),
+                font, font_scale, color, thickness)
+    y_offset += 25
+    
+    # Draw mouth state
+    mouth_open = features.get("mouth_open", False)
+    cv2.putText(frame, f"Mouth: {'OPEN' if mouth_open else 'CLOSED'}", (x_pos, y_offset),
+                font, font_scale, color, thickness)
+    y_offset += 25
+    
+    # Draw matched meme
+    if matched_meme:
+        meme_text = f"Meme: {matched_meme} ({confidence:.0%})"
+        cv2.putText(frame, meme_text, (x_pos, y_offset),
+                    font, font_scale, (0, 0, 255), thickness)
+        y_offset += 25
 
 
 def show_main_window(frame, window_name="PoseMeme"):
@@ -122,9 +191,27 @@ def show_meme_video(video_path, x=1400, y=100, window_name="Meme"):
     Returns:
         VideoCapture object for continuous frame reading
     """
-    # TODO: Load video, read next frame, display
-    # Returns a VideoCapture object that can be read from each iteration
-    pass
+    try:
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            print(f"Error: Could not open video {video_path}")
+            return None
+        
+        ret, frame = cap.read()
+        if ret:
+            # Resize if needed
+            h, w = frame.shape[:2]
+            if h > 400:
+                scale = 400 / h
+                frame = cv2.resize(frame, (int(w * scale), 400))
+            
+            cv2.imshow(window_name, frame)
+            cv2.moveWindow(window_name, x, y)
+        
+        return cap
+    except Exception as e:
+        print(f"Error displaying meme video: {e}")
+        return None
 
 
 def close_meme_window(window_name="Meme"):

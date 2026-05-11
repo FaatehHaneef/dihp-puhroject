@@ -18,11 +18,12 @@ def compute_shoulder_angle(pose_landmarks):
     Returns:
         Float: Angle in degrees
     """
-    if pose_landmarks is None or len(pose_landmarks.landmark) < 14:
+    # Handle both Tasks API (list) and old API (.landmark)
+    lm = pose_landmarks if isinstance(pose_landmarks, list) else (pose_landmarks.landmark if pose_landmarks else None)
+    if lm is None or len(lm) < 14:
         return 0.0
     
     import math
-    lm = pose_landmarks.landmark
     
     # Shoulder landmarks: 11 (left), 12 (right)
     left_shoulder = lm[11]
@@ -54,17 +55,20 @@ def is_hand_near_face(pose_landmarks, hand_landmarks, threshold=100):
     if hand_landmarks is None or pose_landmarks is None:
         return False
     
-    if len(pose_landmarks.landmark) < 10:
+    # Handle both Tasks API (list) and old API (.landmark)
+    pose_lm = pose_landmarks if isinstance(pose_landmarks, list) else pose_landmarks.landmark
+    hand_lm_list = hand_landmarks if isinstance(hand_landmarks, list) else hand_landmarks.landmark
+    if len(pose_lm) < 10:
         return False
     
     # Face center (use nose as reference)
-    nose = pose_landmarks.landmark[0]
+    nose = pose_lm[0]
     face_x, face_y = nose.x, nose.y
     
     # Check distance from all hand landmarks to face
     threshold_norm = threshold / 1000  # Convert pixel threshold to normalized
     
-    for hand_lm in hand_landmarks.landmark:
+    for hand_lm in hand_lm_list:
         dx = hand_lm.x - face_x
         dy = hand_lm.y - face_y
         distance = (dx**2 + dy**2) ** 0.5
@@ -87,11 +91,12 @@ def body_symmetry_score(pose_landmarks):
     Returns:
         Float: 0-1 symmetry score
     """
-    if pose_landmarks is None or len(pose_landmarks.landmark) < 14:
+    # Handle both Tasks API (list) and old API (.landmark)
+    lm = pose_landmarks if isinstance(pose_landmarks, list) else (pose_landmarks.landmark if pose_landmarks else None)
+    if lm is None or len(lm) < 14:
         return 0.5
     
     import math
-    lm = pose_landmarks.landmark
     
     # Symmetric joint pairs: (left_idx, right_idx)
     pairs = [
@@ -142,7 +147,9 @@ def get_body_posture_vector(pose_landmarks):
             "arms_raised": bool
         }
     """
-    if pose_landmarks is None or len(pose_landmarks.landmark) < 28:
+    # Handle both Tasks API (list) and old API (.landmark)
+    lm = pose_landmarks if isinstance(pose_landmarks, list) else (pose_landmarks.landmark if pose_landmarks else None)
+    if lm is None or len(lm) < 28:
         return {
             "head_forward": True,
             "shoulders_level": True,
@@ -152,7 +159,6 @@ def get_body_posture_vector(pose_landmarks):
         }
     
     import math
-    lm = pose_landmarks.landmark
     
     # Spine angle: shoulder to hip
     shoulder_mid_x = (lm[11].x + lm[12].x) / 2
@@ -201,11 +207,12 @@ def compute_arm_angle(pose_landmarks, arm_side="right"):
     Returns:
         Float: Angle in degrees
     """
-    if pose_landmarks is None or len(pose_landmarks.landmark) < 17:
+    # Handle both Tasks API (list) and old API (.landmark)
+    lm = pose_landmarks if isinstance(pose_landmarks, list) else (pose_landmarks.landmark if pose_landmarks else None)
+    if lm is None or len(lm) < 17:
         return 0.0
     
     import math
-    lm = pose_landmarks.landmark
     
     # Right side: 12=shoulder, 14=elbow, 16=wrist
     # Left side: 11=shoulder, 13=elbow, 15=wrist
@@ -257,12 +264,80 @@ def hands_touching(left_hand_landmarks, right_hand_landmarks, threshold=50):
     
     import math
     
-    # Use wrist landmarks (landmark 0 in hand coords corresponds to wrist)
-    left_wrist = left_hand_landmarks.landmark[0]
-    right_wrist = right_hand_landmarks.landmark[0]
+    # Handle both Tasks API (list) and old API (.landmark)
+    left_wrist = left_hand_landmarks[0] if isinstance(left_hand_landmarks, list) else left_hand_landmarks.landmark[0]
+    right_wrist = right_hand_landmarks[0] if isinstance(right_hand_landmarks, list) else right_hand_landmarks.landmark[0]
     
     # Euclidean distance between wrists
     dist = math.sqrt((left_wrist.x - right_wrist.x)**2 + (left_wrist.y - right_wrist.y)**2)
-    
+
     # Threshold for "touching"
     return dist < 0.1
+
+
+def estimate_head_yaw_from_pose(pose_landmarks):
+    """
+    Estimate head turn from POSE landmarks alone — works when the face mesh fails
+    (e.g. profile view). Returns a pseudo-degree value comparable to face_yaw.
+
+    Compares the nose x position to the shoulder midpoint x, normalized by
+    shoulder width. The face is heading toward whichever side the nose drifts to.
+    Positive ~ turned to one side, negative ~ other (sign isn't important for
+    drake_no which uses absolute value).
+    """
+    lm = pose_landmarks if isinstance(pose_landmarks, list) else (
+        pose_landmarks.landmark if pose_landmarks else None
+    )
+    if lm is None or len(lm) < 13:
+        return 0.0
+
+    nose = lm[0]
+    left_shoulder = lm[11]
+    right_shoulder = lm[12]
+
+    # Need confident shoulder detections for the estimate to be meaningful
+    if _pose_vis(left_shoulder) < 0.5 or _pose_vis(right_shoulder) < 0.5:
+        return 0.0
+
+    shoulder_mid_x = (left_shoulder.x + right_shoulder.x) / 2
+    shoulder_width = abs(left_shoulder.x - right_shoulder.x)
+    if shoulder_width < 1e-3:
+        return 0.0
+
+    offset_ratio = (nose.x - shoulder_mid_x) / shoulder_width
+    # Empirical scale: ~0.15 offset ~ 12 degrees in face_yaw units
+    return offset_ratio * 80.0
+
+
+def _pose_vis(point, default=1.0):
+    """Visibility/presence value for a landmark; the Tasks API uses 'presence', old API 'visibility'."""
+    return getattr(point, "visibility", getattr(point, "presence", default))
+
+
+def is_arm_extended_sideways(pose_landmarks, arm_side="right", min_horizontal=0.20):
+    """
+    True when the wrist is far to the side of the shoulder horizontally
+    (woman_yelling_at_cat pointing-away gesture).
+    Requires the wrist to actually be VISIBLE — gates out hallucinated wrists.
+    """
+    lm = pose_landmarks if isinstance(pose_landmarks, list) else (
+        pose_landmarks.landmark if pose_landmarks else None
+    )
+    if lm is None or len(lm) < 17:
+        return False
+
+    if arm_side == "right":
+        shoulder = lm[12]
+        wrist = lm[16]
+    else:
+        shoulder = lm[11]
+        wrist = lm[15]
+
+    # If the model isn't confident the wrist is visible, don't trust its position.
+    if _pose_vis(wrist) < 0.6 or _pose_vis(shoulder) < 0.6:
+        return False
+
+    horizontal_reach = abs(wrist.x - shoulder.x)
+    # And the wrist roughly at shoulder height (not raised high or hanging down)
+    vertical_offset = abs(wrist.y - shoulder.y)
+    return horizontal_reach > min_horizontal and vertical_offset < 0.20

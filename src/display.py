@@ -14,6 +14,64 @@ _meme_window_open = False
 _meme_window_x = 1400
 _meme_window_y = 100
 
+# Cache for the currently-displayed meme image so we can overlay it onto each frame
+_overlay_cache = {"path": None, "img": None}
+
+
+def overlay_meme_on_frame(frame, meme_path, max_w=320, max_h=320, margin=15):
+    """
+    Composite a meme image onto the top-right corner of `frame`.
+
+    Replaces the separate popup window which could land off-screen.
+    Caches the loaded image so we don't re-read from disk every frame.
+    Returns True on success, False otherwise.
+    """
+    if meme_path is None:
+        return False
+
+    meme_path = str(meme_path)
+    if _overlay_cache["path"] != meme_path:
+        img = cv2.imread(meme_path)
+        if img is None:
+            return False
+        _overlay_cache["path"] = meme_path
+        _overlay_cache["img"] = img
+
+    meme_img = _overlay_cache["img"]
+    if meme_img is None:
+        return False
+
+    # Scale meme to fit within max_w x max_h while keeping aspect ratio
+    mh, mw = meme_img.shape[:2]
+    scale = min(max_w / mw, max_h / mh, 1.0)
+    if scale < 1.0:
+        meme_img = cv2.resize(meme_img, (int(mw * scale), int(mh * scale)))
+
+    fh, fw = frame.shape[:2]
+    rh, rw = meme_img.shape[:2]
+    x1 = fw - rw - margin
+    y1 = margin
+    x2 = x1 + rw
+    y2 = y1 + rh
+    if x1 < 0 or y1 < 0:
+        return False
+
+    # Border + paste
+    cv2.rectangle(frame, (x1 - 2, y1 - 2), (x2 + 2, y2 + 2), (255, 255, 255), 2)
+    frame[y1:y2, x1:x2] = meme_img
+
+    # Caption strip
+    label_path = Path(meme_path).stem
+    cv2.rectangle(frame, (x1, y2 - 28), (x2, y2), (0, 0, 0), -1)
+    cv2.putText(frame, label_path, (x1 + 6, y2 - 8),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1)
+    return True
+
+
+def clear_overlay_cache():
+    _overlay_cache["path"] = None
+    _overlay_cache["img"] = None
+
 
 def draw_landmarks(frame, landmarks, landmark_type="pose"):
     """
@@ -49,7 +107,8 @@ def draw_landmarks(frame, landmarks, landmark_type="pose"):
         (0, 17), (17, 18), (18, 19), (19, 20),  # Pinky
     ]
     
-    lm = landmarks.landmark
+    # Handle both Tasks API (list) and old API (.landmark)
+    lm = landmarks if isinstance(landmarks, list) else landmarks.landmark
     
     # Draw connections
     if landmark_type == "pose":
@@ -100,30 +159,27 @@ def draw_debug_info(frame, features, matched_meme=None, confidence=0.0):
     y_offset = 30
     x_pos = 10
     
-    # Draw finger count
-    finger_count = features.get("fingers_extended", 0)
-    cv2.putText(frame, f"Fingers: {finger_count}", (x_pos, y_offset),
-                font, font_scale, color, thickness)
-    y_offset += 25
-    
-    # Draw head orientation
-    head_tilt = features.get("head_tilt_angle", 0.0)
-    cv2.putText(frame, f"Head Tilt: {head_tilt:.1f}°", (x_pos, y_offset),
-                font, font_scale, color, thickness)
-    y_offset += 25
-    
-    # Draw mouth state
-    mouth_open = features.get("mouth_open", False)
-    cv2.putText(frame, f"Mouth: {'OPEN' if mouth_open else 'CLOSED'}", (x_pos, y_offset),
-                font, font_scale, color, thickness)
-    y_offset += 25
-    
-    # Draw matched meme
+    def line(text, col=color):
+        nonlocal y_offset
+        cv2.putText(frame, text, (x_pos, y_offset), font, font_scale, col, thickness)
+        y_offset += 22
+
+    line(f"Hands: {features.get('hand_count', 0)}  Fingers: {features.get('fingers_extended', 0)}")
+    line(f"Mouth: {features.get('mouth_state', '?')}  Smile: {features.get('is_smiling', False)}")
+    line(f"Eyes: {features.get('eye_state', '?')}")
+    line(f"Gaze: {features.get('gaze_direction', '?')}  AtCam: {features.get('looking_at_camera', False)}")
+    line(f"Tilt: {features.get('head_tilt_angle', 0.0):.1f}  Yaw: {features.get('head_yaw', 0.0):.1f}")
+    if features.get("any_finger_in_mouth"):
+        line("FingerInMouth", (0, 200, 255))
+    if features.get("any_hand_above_head"):
+        line("HandAboveHead", (0, 200, 255))
+    if features.get("any_hand_pointing_forward"):
+        line("PointingFwd", (0, 200, 255))
+    if features.get("any_arm_extended_sideways"):
+        line("ArmSideways", (0, 200, 255))
+
     if matched_meme:
-        meme_text = f"Meme: {matched_meme} ({confidence:.0%})"
-        cv2.putText(frame, meme_text, (x_pos, y_offset),
-                    font, font_scale, (0, 0, 255), thickness)
-        y_offset += 25
+        line(f"Meme: {matched_meme} ({confidence:.0%})", (0, 0, 255))
 
 
 def show_main_window(frame, window_name="PoseMeme"):

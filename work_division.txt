@@ -1,0 +1,213 @@
+================================================================================
+                            POSEMEME — WORK DIVISION
+================================================================================
+
+Yo Ibbo, yo Moju — here's where we are. Pick what you want, divide the rest,
+and let's get this thing exam-ready. Anything I haven't written here, ping me.
+
+
+================================================================================
+PART 1 — WHAT'S ALREADY DONE (by Faateh)
+================================================================================
+
+MVP works end-to-end. Camera in, meme out. Specifically:
+
+  1. Camera + MediaPipe pipeline
+     - Live webcam via cv2.VideoCapture
+     - Migrated off the deprecated mp.solutions.holistic to the current
+       MediaPipe Tasks API (HolisticLandmarker, VIDEO mode)
+     - Model file (holistic_landmarker.task) downloaded into the user's
+       MediaPipe cache via download_model.py
+     - Hand / face / pose detection confidence floors lowered to 0.3 so
+       hands pressed against the cheek don't slip past
+
+  2. DIP preprocessing layer (src/preprocessing.py)
+     - Histogram equalisation
+     - Adaptive blur
+     - BGR -> HSV conversion
+
+  3. DIP segmentation layer (src/segmentation.py)
+     - HSV skin mask
+     - Morphological cleanup (open / close)
+     - Connected-component analysis to clean noise
+
+  4. Feature extraction (face / hand / pose modules)
+     Low-level metrics: head tilt, head yaw (face-mesh-based AND a pose-based
+     fallback for profile turns), shoulder angle, arm angles, mouth openness,
+     mouth aspect ratio, eye aspect ratio, eyebrow elevation, lip-to-finger
+     distance, body symmetry.
+     High-level categorical states the matcher reads:
+       - mouth_state   -> closed | smile | open_round | open_wide | open_neutral
+       - eye_state     -> closed | narrow | normal | wide
+       - gaze_direction, looking_at_camera, is_smiling
+       - finger_in_mouth_left / _right
+       - hand_above_head_left / _right (uses brow line, not strict forehead)
+       - hand_pointing_forward (uses landmark z-depth)
+       - arm_extended_sideways (gated on landmark visibility -- no
+         hallucinated wrists)
+
+  5. Rule-based meme matcher (src/meme_matcher.py)
+     Replaces the old Euclidean-distance matcher that always defaulted to
+     suspicious_cat when no hand was visible. Each meme now declares:
+       - required    : ALL must hold for the meme to be eligible
+       - optional    : each match adds bonus score
+       - forbidden   : ANY match disqualifies the meme
+     Threshold raised to 0.55, "no match" is now a valid verdict.
+
+  6. Active memes (8) with hand-authored rule sets
+       crash_out, drake_no, drake_yes, sparrow_influencer,
+       surprised_pikachu, thinking_monkey, zesty, woman_yelling_at_cat
+     Archived (disabled flag, image moved to memes/archive/):
+       suspicious_cat, side_eye_chloe
+     -- these two collide on "tilted head, narrow vs wide eyes" which the
+        eye-aspect-ratio threshold can't yet separate cleanly.
+
+  7. Display layer
+     - In-frame meme overlay: matched meme composited into the top-right
+       of the camera frame (no more separate popup wandering off-screen)
+     - Live debug overlay showing hand count, mouth/eye state, gaze,
+       AtCam, tilt, yaw, smile, plus orange event banners for
+       FingerInMouth / HandAboveHead / PointingFwd / ArmSideways
+     - Pose + hand skeletons drawn on each frame
+     - Meme lock duration cut to 20 frames so stale verdicts clear fast
+
+
+================================================================================
+PART 2 — WHAT'S LEFT (errors, gaps, polish)
+================================================================================
+
+  A. GLITCHY OVERLAY
+     When MediaPipe momentarily loses the face mesh (profile turn, low
+     light, fast motion) the debug overlay flicks to "unknown" values and
+     the meme overlay can disappear-reappear in a single frame.
+     -> Smooth with a "last known good" feature dict held for N frames
+        before falling back to defaults. Maybe 5-10 frames.
+
+  B. LOOSE CONSTRAINTS (false positives)
+     A bunch of rules still fire when they shouldn't. Examples we've seen:
+       - drake_no triggers on small head turns
+       - finger_in_mouth fires when finger is near the chin, not the lip
+       - is_smiling needs better calibration (currently fires on neutral
+         when mouth-width is naturally wide)
+     -> Sit with the live debug overlay and tune thresholds per feature.
+        Each constant in face_analysis.py / hand_analysis.py is a guess.
+
+  C. DIP PRINCIPLE VERIFICATION  <-- IMPORTANT FOR THE MARKING SCHEME
+     The rubric expects manual DIP work, not "MediaPipe does everything".
+     Need to audit and document:
+       - preprocessing.py  -> are we actually using histogram eq + blur
+                              meaningfully? Maybe show before/after frames.
+       - segmentation.py   -> skin mask + morphology -> is the output
+                              actually used downstream? If not, hook it
+                              into the feature pipeline so it MATTERS.
+       - feature math      -> our angles, distances, EAR, MAR, convex
+                              hull, convexity defects are all manual DIP
+                              -- make sure each is referenced/used and
+                              documented in the report.
+     The skin mask, in particular, is computed every frame and passed
+     into extract_all_features() but isn't read by any meme rule yet.
+     Either use it or drop it -- can't have dead DIP code.
+
+  D. CODE REVIEW / GAP FILLING
+     - Edge cases: what happens when pose_landmarks exist but all
+       wrists have visibility < 0.5? Currently we trust default 1.0 --
+       maybe make the default 0.0 so missing data fails closed.
+     - The _pose_vis helper is defined AFTER it's used at the top of
+       pose_analysis.py. Python lets us get away with it (lookup at
+       call time) but it reads ugly -- reorder.
+     - meme_lock_frames doesn't update the overlay's confidence text
+       smoothly; we re-score per frame which is fine but the number
+       can jitter wildly. Display a smoothed score (EMA).
+     - is_smiling could combine corner-elevation + width-ratio with AND
+       instead of OR for stricter detection.
+
+  E. MORE MEMES (with UNIQUE signatures -- this is the hard part)
+     Targets to add (just suggestions, swap as you wish):
+       - this_is_fine        (both hands relaxed, neutral face)
+       - distracted_boyfriend (head turned away + gaze elsewhere)
+       - kombucha_girl        (face scrunched, mouth twisted)
+       - shocked_face         (extreme eyebrow raise + open round mouth)
+       - galaxy_brain         (both hands at temples)
+     KEY RULE: each new meme must trigger on a feature combination that
+     NO other meme triggers on. If two memes overlap, the matcher will
+     pick whichever has higher priority and we get random wrong answers.
+     Before merging a new meme rule, simulate it against the existing
+     rule set (see the test snippet in commit message history).
+
+
+================================================================================
+PART 3 — OPTIONAL FORWARD PATH (cool but not required)
+================================================================================
+
+DROP-IN MEME PIPELINE.
+Goal: drop a meme image into memes/incoming/, run a one-off script, and
+the meme becomes available at runtime with auto-generated rules. No
+hand-authoring required.
+
+Sketch:
+  1. Script reads each new image with MediaPipe (static-image mode).
+  2. Computes the same feature dict our runtime computes (mouth state,
+     gaze, hand positions, etc).
+  3. Generates a "rule" by picking the N most distinctive features --
+     those whose values are far from the average across all memes.
+     This is the UNIQUENESS problem.
+  4. Appends the new meme entry to meme_templates.json (active, with
+     "auto_generated": true so we know it wasn't human-tuned).
+  5. Conflict check: simulates the new rule against all existing memes
+     using current runtime features; refuses to add if it would collide
+     with another meme >X% of the time.
+
+Why this is hard: meme images often don't have a clean person doing the
+pose -- they're cartoons, group shots, or close crops. MediaPipe may not
+extract reliable landmarks. Probably need a manual fallback ("MediaPipe
+couldn't read this meme -- please tag the dominant feature yourself")
+and a few user-defined feature shortcuts.
+
+
+================================================================================
+PART 4 — SUGGESTED SPLIT (Ibbo + Moju, divide as you like)
+================================================================================
+
+  STREAM 1 -- ROBUSTNESS & TUNING (lighter on new code, heavier on
+              testing-with-camera and adjusting numbers)
+    [ ] Smooth the debug + meme overlay with last-known-good state
+        (item A above)
+    [ ] Tune thresholds for is_smiling, is_finger_in_mouth,
+        is_arm_extended_sideways, head_yaw cutoff (item B)
+    [ ] Code review pass: edge cases, _pose_vis ordering, EMA on the
+        displayed confidence score (item D)
+
+  STREAM 2 -- DIP REPORT-READINESS (heaviest theory weight)
+    [ ] Audit preprocessing + segmentation usage; either wire them
+        into the matcher OR document why they exist (item C)
+    [ ] Add a "before / after preprocessing" debug view (keypress
+        toggle) so we can show DIP in action during the demo
+    [ ] Write the DIP rationale section: which classical technique
+        per module, why we picked it, what it produces
+
+  STREAM 3 -- DATA EXPANSION
+    [ ] Add 3-5 new memes with unique rule signatures, run the
+        collision check (item E)
+    [ ] Source clean meme images and place in memes/
+    [ ] Optionally: prototype the drop-in pipeline (Part 3 above)
+
+  STREAM 4 -- DEMO PREP (shared)
+    [ ] Record a 2-3 minute demo video covering all 8+ memes
+    [ ] Write a short README section: "How to test each meme"
+        (which gesture triggers which)
+    [ ] Reactivate suspicious_cat / side_eye_chloe if eye-state
+        tuning makes them reliable, OR write them off in the report
+
+
+================================================================================
+RUNNING THE THING
+================================================================================
+
+    python download_model.py        # one-off, fetches the MediaPipe model
+    python src/main.py              # the live demo
+    ESC to exit.
+
+Branch: Faateh-ki-mazboot-tehni
+README has the full setup if you're cloning fresh.
+
+-- Faateh

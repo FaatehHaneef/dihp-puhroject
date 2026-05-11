@@ -1,0 +1,96 @@
+{
+  "thinking_monkey": {
+    "image": "thinking_monkey.jpeg",
+    "features": {
+      "fingers_extended_right": 1,
+      "hand_near_face_right": true,
+      "mouth_open": true,
+      "mouth_openness": 0.15,
+      "head_tilt_angle": -5.0,
+      "shoulder_angle": 2.0,
+      "body_symmetry": 0.7
+    }
+  },
+  "zesty": {
+    "image": "zesty.gif",
+    "features": {
+      "fingers_extended_right": 1,
+      "hand_near_face_right": true,
+      "mouth_open": true,
+      "mouth_openness": 0.25,
+      "head_tilt_angle": 10.0,
+      "shoulder_angle": 5.0,
+      "body_symmetry": 0.6
+    }
+  },
+  "drake_yes": {
+    "image": "drake_yes.jpg",
+    "features": {
+      "fingers_extended_right": 5,
+      "hand_near_face_right": false,
+      "mouth_open": false,
+      "head_tilt_angle": 0.0,
+      "shoulder_angle": 3.0,
+      "body_symmetry": 0.8
+    }
+  },
+  "drake_no": {
+    "image": "drake_no.jpg",
+    "features": {
+      "fingers_extended_right": 0,
+      "hand_near_face_right": false,
+      "mouth_open": false,
+      "head_tilt_angle": -15.0,
+      "shoulder_angle": 8.0,
+      "body_symmetry": 0.75
+    }
+  },
+  "woman_yelling_at_cat": {
+    "image": "woman_yelling_at_cat.jpg",
+    "features": {
+      "fingers_extended_right": 5,
+      "hand_near_face_right": false,
+      "mouth_open": true,
+      "mouth_openness": 0.2,
+      "head_tilt_angle": 5.0,
+      "shoulder_angle": 10.0,
+      "body_symmetry": 0.65
+    }
+  },
+  "surprised_pikachu": {
+    "image": "surprised_pikachu.png",
+    "features": {
+      "fingers_extended_right": 2,
+      "hand_near_face_right": false,
+      "mouth_open": true,
+      "mouth_openness": 0.3,
+      "head_tilt_angle": 0.0,
+      "shoulder_angle": 2.0,
+      "body_symmetry": 0.85
+    }
+  },
+  "side_eye_chloe": {
+    "image": "side_eye_chloe.jpeg",
+    "features": {
+      "fingers_extended_right": 3,
+      "hand_near_face_right": false,
+      "mouth_open": false,
+      "mouth_openness": 0.05,
+      "head_tilt_angle": 30.0,
+      "shoulder_angle": 5.0,
+      "body_symmetry": 0.8
+    }
+  },
+  "suspicious_cat": {
+    "image": "suspicious_cat.jpg",
+    "features": {
+      "fingers_extended_right": 0,
+      "hand_near_face_right": false,
+      "mouth_open": false,
+      "mouth_openness": 0.02,
+      "head_tilt_angle": -20.0,
+      "shoulder_angle": 3.0,
+      "body_symmetry": 0.9
+    }
+  }
+}

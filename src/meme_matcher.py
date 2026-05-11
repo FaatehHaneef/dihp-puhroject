@@ -5,6 +5,7 @@ DIP Concepts: Feature matching, rule-based classification
 """
 
 import json
+import math
 from pathlib import Path
 
 
@@ -230,3 +231,107 @@ def get_feature_summary(features):
                 parts.append(f"{key}: {val}")
     
     return " | ".join(parts)
+
+
+def compute_feature_distance(user_features, template_features):
+    """
+    Compute distance between user features and template features.
+    Lower = better match.
+    
+    Args:
+        user_features: Dict of user's extracted features
+        template_features: Dict of template's reference features
+    
+    Returns:
+        Float: Distance (0-1 normalized)
+    """
+    if not template_features:
+        return float('inf')
+    
+    distance = 0.0
+    matched_keys = 0
+    
+    # Key features with weights (higher weight = more important)
+    weighted_features = {
+        "fingers_extended_left": 1.0,
+        "fingers_extended_right": 1.0,
+        "hand_angle_left": 0.5,
+        "hand_angle_right": 0.5,
+        "mouth_open": 2.0,
+        "mouth_openness": 1.0,
+        "head_tilt_angle": 0.8,
+        "gaze_direction": 0.5,
+        "shoulder_angle": 0.5,
+        "body_symmetry": 0.3,
+        "hands_touching": 1.0,
+    }
+    
+    for key, weight in weighted_features.items():
+        if key in template_features and key in user_features:
+            template_val = template_features[key]
+            user_val = user_features.get(key, 0)
+            
+            # Different distance metrics based on data type
+            if isinstance(template_val, bool):
+                # Boolean: 0 if match, 1 if different
+                diff = 0 if (template_val == user_val) else 1
+            elif isinstance(template_val, str):
+                # String (gaze direction): 0 if match, 1 if different
+                diff = 0 if (str(template_val) == str(user_val)) else 1
+            else:
+                # Numeric: normalized absolute difference
+                try:
+                    diff = abs(float(template_val) - float(user_val))
+                    # Normalize to 0-1 range (adjust scale factor as needed)
+                    diff = min(diff / 100.0, 1.0)
+                except (ValueError, TypeError):
+                    diff = 1.0
+            
+            distance += diff * weight
+            matched_keys += weight
+    
+    # Normalize distance by total weight
+    if matched_keys > 0:
+        distance = distance / matched_keys
+    
+    return distance
+
+
+def match_best_meme_by_template(user_features, meme_templates, threshold=0.3):
+    """
+    Find best matching meme by comparing features to stored templates.
+    
+    Args:
+        user_features: Dict of user's extracted features
+        meme_templates: Dict of {meme_name: template, ...}
+        threshold: Maximum distance to consider a match (0-1)
+    
+    Returns:
+        Tuple: (meme_name: str, confidence: float)
+        Returns (None, 0.0) if no match found
+    """
+    if not meme_templates:
+        return None, 0.0
+    
+    best_meme = None
+    best_distance = float('inf')
+    
+    for meme_name, template in meme_templates.items():
+        template_features = template.get("features", {})
+        
+        # Compute distance to this template
+        distance = compute_feature_distance(user_features, template_features)
+        
+        # Update best if closer
+        if distance < best_distance:
+            best_meme = meme_name
+            best_distance = distance
+    
+    # Convert distance to confidence (inverse: lower distance = higher confidence)
+    confidence = max(0.0, 1.0 - best_distance) if best_distance < float('inf') else 0.0
+    
+    # Only return match if confidence above threshold
+    if confidence > threshold:
+        return best_meme, confidence
+    
+    return None, 0.0

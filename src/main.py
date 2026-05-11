@@ -19,7 +19,8 @@ from face_analysis import (compute_head_tilt_angle, is_mouth_open, compute_gaze_
                            get_face_orientation, lip_to_nose_distance, lip_to_finger_distance, eye_aspect_ratio)
 from pose_analysis import (is_hand_near_face, body_symmetry_score, compute_shoulder_angle, 
                           get_body_posture_vector, compute_arm_angle, hands_touching)
-from meme_matcher import load_meme_config, match_best_meme, evaluate_triggers, compute_confidence
+from meme_matcher import (load_meme_config, match_best_meme, evaluate_triggers, compute_confidence,
+                         match_best_meme_by_template)
 from display import show_main_window, show_meme_popup, draw_landmarks, draw_debug_info, close_meme_window, cleanup_windows
 
 
@@ -186,15 +187,23 @@ def main():
     
     print("✓ MediaPipe loaded")
     
-    # Load meme database
+    # Load meme templates (feature-based matching)
+    template_path = Path(__file__).parent / "meme_templates.json"
+    try:
+        with open(template_path, 'r') as f:
+            meme_templates = json.load(f)
+        print(f"✓ Loaded {len(meme_templates)} meme templates")
+    except FileNotFoundError:
+        print(f"Warning: {template_path} not found")
+        meme_templates = {}
+    
+    # Also load meme_config.json for image paths and metadata
     config_path = Path(__file__).parent / "meme_config.json"
     try:
         with open(config_path, 'r') as f:
-            meme_db = json.load(f)
-        print(f"✓ Loaded {len(meme_db)} memes")
+            meme_config = json.load(f)
     except FileNotFoundError:
-        print(f"Warning: {config_path} not found")
-        meme_db = {}
+        meme_config = {}
     
     # Meme popup state (debouncing)
     current_meme = None
@@ -248,18 +257,18 @@ def main():
         if meme_lock_frames > 0:
             meme_lock_frames -= 1
         else:
-            # Extract features and match meme
+            # Extract features and match meme using templates
             if results.pose_landmarks and (results.left_hand_landmarks or results.right_hand_landmarks or results.face_landmarks):
                 features = extract_all_features(results, skin_mask)
-                matched_meme, confidence = match_best_meme(features, meme_db)
+                matched_meme, confidence = match_best_meme_by_template(features, meme_templates, threshold=0.4)
                 
-                if matched_meme and confidence > 0.3:
+                if matched_meme and confidence > 0.4:
                     current_meme = matched_meme
                     meme_lock_frames = MEME_LOCK_DURATION
                     
                     # Try to show meme
-                    meme_data = meme_db.get(matched_meme, {})
-                    meme_file = meme_data.get("image", "")
+                    template = meme_templates.get(matched_meme, {})
+                    meme_file = template.get("image", "")
                     meme_path = Path(__file__).parent.parent / "memes" / meme_file
                     
                     if meme_path.exists():
@@ -270,8 +279,12 @@ def main():
         # Draw debug info
         if meme_lock_frames > 0 and current_meme:
             features = extract_all_features(results, skin_mask)
-            meme_data = meme_db.get(current_meme, {})
-            confidence = compute_confidence(features, meme_data.get("triggers", {}))
+            template = meme_templates.get(current_meme, {})
+            template_features = template.get("features", {})
+            # Compute similarity score
+            from meme_matcher import compute_feature_distance
+            distance = compute_feature_distance(features, template_features)
+            confidence = max(0.0, 1.0 - distance)
             draw_debug_info(frame, features, current_meme, confidence)
         else:
             if results.pose_landmarks and (results.left_hand_landmarks or results.right_hand_landmarks or results.face_landmarks):

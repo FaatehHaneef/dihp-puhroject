@@ -51,8 +51,49 @@ def evaluate_triggers(features, meme_triggers):
     Returns:
         Bool: True if all triggers satisfied
     """
-    # TODO: Iterate meme_triggers, check against features
-    # Support string comparisons (">=4", ">10", etc.) and booleans
+    for trigger_key, trigger_value in meme_triggers.items():
+        if trigger_key not in features:
+            return False
+        
+        feature_val = features[trigger_key]
+        
+        # Boolean comparison
+        if isinstance(trigger_value, bool):
+            if feature_val != trigger_value:
+                return False
+        
+        # String comparison with operators
+        elif isinstance(trigger_value, str):
+            if trigger_value.startswith(">="):
+                threshold = float(trigger_value[2:])
+                if not (feature_val >= threshold):
+                    return False
+            elif trigger_value.startswith("<="):
+                threshold = float(trigger_value[2:])
+                if not (feature_val <= threshold):
+                    return False
+            elif trigger_value.startswith(">"):
+                threshold = float(trigger_value[1:])
+                if not (feature_val > threshold):
+                    return False
+            elif trigger_value.startswith("<"):
+                threshold = float(trigger_value[1:])
+                if not (feature_val < threshold):
+                    return False
+            elif trigger_value.startswith("=="):
+                threshold = float(trigger_value[2:])
+                if not (feature_val == threshold):
+                    return False
+            else:
+                # Try direct equality
+                if str(feature_val) != str(trigger_value):
+                    return False
+        
+        # Numeric comparison
+        elif isinstance(trigger_value, (int, float)):
+            if feature_val != trigger_value:
+                return False
+    
     return True
 
 
@@ -68,10 +109,50 @@ def compute_confidence(features, meme_triggers):
     Returns:
         Float: 0-1 confidence score
     """
-    # TODO: Implement weighted scoring
-    # Features that match get higher weights
-    # Average the weighted scores
-    return 0.0
+    if not meme_triggers:
+        return 0.0
+    
+    matched_triggers = 0
+    
+    for trigger_key, trigger_value in meme_triggers.items():
+        if trigger_key not in features:
+            continue
+        
+        feature_val = features[trigger_key]
+        matched = False
+        
+        # Boolean comparison
+        if isinstance(trigger_value, bool):
+            matched = (feature_val == trigger_value)
+        
+        # String comparison with operators
+        elif isinstance(trigger_value, str):
+            if trigger_value.startswith(">="):
+                threshold = float(trigger_value[2:])
+                matched = (feature_val >= threshold)
+            elif trigger_value.startswith("<="):
+                threshold = float(trigger_value[2:])
+                matched = (feature_val <= threshold)
+            elif trigger_value.startswith(">"):
+                threshold = float(trigger_value[1:])
+                matched = (feature_val > threshold)
+            elif trigger_value.startswith("<"):
+                threshold = float(trigger_value[1:])
+                matched = (feature_val < threshold)
+            elif trigger_value.startswith("=="):
+                threshold = float(trigger_value[2:])
+                matched = (feature_val == threshold)
+        
+        # Numeric comparison
+        elif isinstance(trigger_value, (int, float)):
+            matched = (feature_val == trigger_value)
+        
+        if matched:
+            matched_triggers += 1
+    
+    # Confidence = ratio of matched triggers to total triggers
+    confidence = matched_triggers / len(meme_triggers) if meme_triggers else 0.0
+    return confidence
 
 
 def match_best_meme(features, meme_db):
@@ -91,9 +172,24 @@ def match_best_meme(features, meme_db):
     
     best_meme = None
     best_confidence = 0.0
+    best_priority = -1
     
-    # TODO: Iterate meme_db, score each one, keep track of best
-    # Prioritize by meme priority if tied
+    for meme_name, meme_data in meme_db.items():
+        triggers = meme_data.get("triggers", {})
+        
+        # Check if all triggers are satisfied
+        if not evaluate_triggers(features, triggers):
+            continue
+        
+        # Compute confidence score
+        confidence = compute_confidence(features, triggers)
+        priority = meme_data.get("priority", 0)
+        
+        # Update best if this is better (higher confidence, or same confidence but higher priority)
+        if confidence > best_confidence or (confidence == best_confidence and priority > best_priority):
+            best_meme = meme_name
+            best_confidence = confidence
+            best_priority = priority
     
     return best_meme, best_confidence
 

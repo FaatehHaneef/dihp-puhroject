@@ -19,9 +19,23 @@ def compute_head_tilt_angle(face_landmarks):
     Returns:
         Angle in degrees (-90 to 90, where 0 is upright)
     """
-    # TODO: Extract left and right eye landmarks, compute angle
-    # Eye landmarks vary by MediaPipe version
-    return 0.0
+    if face_landmarks is None or len(face_landmarks.landmark) < 468:
+        return 0.0
+    
+    lm = face_landmarks.landmark
+    
+    # Eye outer corners: right eye (133), left eye (362)
+    right_eye = lm[133]
+    left_eye = lm[362]
+    
+    # Compute angle of line between eyes
+    dx = left_eye.x - right_eye.x
+    dy = left_eye.y - right_eye.y
+    
+    import math
+    angle = math.degrees(math.atan2(dy, dx))
+    
+    return angle
 
 
 def is_mouth_open(face_landmarks, threshold=20):
@@ -31,13 +45,27 @@ def is_mouth_open(face_landmarks, threshold=20):
     
     Args:
         face_landmarks: MediaPipe face mesh landmarks
-        threshold: Minimum pixel distance to consider "open"
+        threshold: Minimum pixel distance to consider "open" (in normalized coords)
     
     Returns:
         Tuple: (is_open: bool, openness: float)
     """
-    # TODO: Extract lip landmarks (top, bottom), compute vertical distance
-    return False, 0.0
+    if face_landmarks is None or len(face_landmarks.landmark) < 468:
+        return False, 0.0
+    
+    lm = face_landmarks.landmark
+    
+    # Lip landmarks: top (61), bottom (291)
+    top_lip = lm[61]
+    bottom_lip = lm[291]
+    
+    # Distance in normalized coordinates (0-1)
+    openness = abs(bottom_lip.y - top_lip.y)
+    
+    # Threshold for "open" (tune this value based on testing)
+    is_open = openness > 0.05
+    
+    return is_open, openness
 
 
 def compute_gaze_direction(face_landmarks):

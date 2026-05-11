@@ -66,17 +66,27 @@ def compute_finger_state(landmarks, hand_side="right"):
         }
         True = extended, False = curled
     """
-    # TODO: Implement landmark-based finger extension detection
-    # Compare PIP joint (second knuckle) vs. tip Y-coordinate
-    # If tip Y < PIP Y significantly, finger is extended
+    if landmarks is None or len(landmarks.landmark) < 21:
+        return {"thumb": False, "index": False, "middle": False, "ring": False, "pinky": False}
     
-    return {
-        "thumb": False,
-        "index": False,
-        "middle": False,
-        "ring": False,
-        "pinky": False
-    }
+    lm = landmarks.landmark
+    
+    # Finger indices: tip (4/8/12/16/20), PIP (3/7/11/15/19)
+    finger_tips = [4, 8, 12, 16, 20]
+    finger_pips = [3, 7, 11, 15, 19]
+    finger_names = ["thumb", "index", "middle", "ring", "pinky"]
+    
+    state = {}
+    for i, name in enumerate(finger_names):
+        tip = lm[finger_tips[i]]
+        pip = lm[finger_pips[i]]
+        
+        # If tip Y is significantly less than PIP Y, finger is extended
+        # (Y increases downward in image coordinates)
+        is_extended = (pip.y - tip.y) > 0.05
+        state[name] = is_extended
+    
+    return state
 
 
 def count_fingers(landmarks, hand_side="right"):
@@ -90,6 +100,8 @@ def count_fingers(landmarks, hand_side="right"):
     Returns:
         Integer: 0-5 (number of extended fingers)
     """
+    if landmarks is None:
+        return 0
     finger_state = compute_finger_state(landmarks, hand_side)
     return sum(finger_state.values())
 

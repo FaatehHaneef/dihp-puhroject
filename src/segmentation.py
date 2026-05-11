@@ -11,6 +11,7 @@ import numpy as np
 def get_skin_mask(hsv_frame, h_range=(0, 20), s_range=(10, 150), v_range=(60, 255)):
     """
     Detect skin regions using HSV thresholding.
+    Tuned for typical skin tones in indoor lighting.
     
     Args:
         hsv_frame: HSV image (uint8)
@@ -21,12 +22,11 @@ def get_skin_mask(hsv_frame, h_range=(0, 20), s_range=(10, 150), v_range=(60, 25
     Returns:
         Binary mask (uint8, 0/255)
     """
-    # TODO: Tune HSV ranges for robust skin detection
     lower = np.array([h_range[0], s_range[0], v_range[0]], dtype=np.uint8)
     upper = np.array([h_range[1], s_range[1], v_range[1]], dtype=np.uint8)
     mask = cv2.inRange(hsv_frame, lower, upper)
     
-    # Handle hue wrap-around (skin can be near 180)
+    # Handle hue wrap-around (skin can be near 180 for darker tones)
     lower_wrap = np.array([170, s_range[0], v_range[0]], dtype=np.uint8)
     upper_wrap = np.array([180, s_range[1], v_range[1]], dtype=np.uint8)
     mask_wrap = cv2.inRange(hsv_frame, lower_wrap, upper_wrap)

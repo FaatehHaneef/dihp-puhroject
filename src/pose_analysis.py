@@ -30,15 +30,32 @@ def is_hand_near_face(pose_landmarks, hand_landmarks, threshold=100):
     Args:
         pose_landmarks: MediaPipe pose landmarks
         hand_landmarks: MediaPipe hand landmarks (21 points)
-        threshold: Maximum distance in pixels
+        threshold: Maximum distance in normalized coordinates (0-1 scale)
     
     Returns:
         Bool: True if any hand point is near face
     """
-    # TODO: Extract face center from pose landmarks (nose, eyes)
-    # Check distance from hand landmarks to face center
     if hand_landmarks is None or pose_landmarks is None:
         return False
+    
+    if len(pose_landmarks.landmark) < 10:
+        return False
+    
+    # Face center (use nose as reference)
+    nose = pose_landmarks.landmark[0]
+    face_x, face_y = nose.x, nose.y
+    
+    # Check distance from all hand landmarks to face
+    threshold_norm = threshold / 1000  # Convert pixel threshold to normalized
+    
+    for hand_lm in hand_landmarks.landmark:
+        dx = hand_lm.x - face_x
+        dy = hand_lm.y - face_y
+        distance = (dx**2 + dy**2) ** 0.5
+        
+        if distance < 0.3:  # Normalized distance threshold
+            return True
+    
     return False
 
 

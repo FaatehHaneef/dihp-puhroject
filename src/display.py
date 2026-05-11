@@ -68,7 +68,7 @@ def show_main_window(frame, window_name="PoseMeme"):
     cv2.imshow(window_name, frame)
 
 
-def show_meme_popup(meme_path, x=1400, y=100, window_name="Meme"):
+def show_meme_popup(meme_path, x=1400, y=100, window_name="Meme", max_height=400):
     """
     Display meme image in a separate popup window.
     
@@ -77,6 +77,7 @@ def show_meme_popup(meme_path, x=1400, y=100, window_name="Meme"):
         x: Window X position on screen
         y: Window Y position on screen
         window_name: Window title
+        max_height: Maximum height to resize to
     
     Returns:
         Bool: True if successfully displayed, False otherwise
@@ -91,9 +92,9 @@ def show_meme_popup(meme_path, x=1400, y=100, window_name="Meme"):
         
         # Resize meme if it's too large
         h, w = meme_img.shape[:2]
-        if h > 600:
-            scale = 600 / h
-            meme_img = cv2.resize(meme_img, (int(w * scale), 600))
+        if h > max_height:
+            scale = max_height / h
+            meme_img = cv2.resize(meme_img, (int(w * scale), max_height))
         
         cv2.imshow(window_name, meme_img)
         cv2.moveWindow(window_name, x, y)

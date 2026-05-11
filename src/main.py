@@ -8,9 +8,12 @@ Phase 1: Foundation — Camera loop, preprocessing, segmentation, landmark overl
 import cv2
 import json
 import time
-import mediapipe as mp
 import numpy as np
 from pathlib import Path
+from mediapipe.tasks.python.vision import HolisticLandmarker, HolisticLandmarkerOptions, RunningMode
+from mediapipe.tasks.python.core import base_options
+from mediapipe import Image as MPImage
+import mediapipe as mp
 
 from preprocessing import histogram_equalize, adaptive_blur, bgr_to_hsv
 from segmentation import get_skin_mask, apply_morphology, connected_component_analysis
@@ -102,8 +105,11 @@ def extract_all_features(results, skin_mask):
 
 
 def draw_pose_skeleton(frame, landmarks):
-    """Draw pose skeleton on frame."""
+    """Draw pose skeleton on frame. Handles both old and Tasks API formats."""
     h, w, _ = frame.shape
+    
+    # Handle both landmark list formats (Tasks API returns list directly, old API uses .landmark)
+    lm_list = landmarks if isinstance(landmarks, list) else landmarks.landmark
     
     # Define pose connections (body skeleton)
     connections = [
@@ -117,24 +123,35 @@ def draw_pose_skeleton(frame, landmarks):
     
     # Draw connections
     for start, end in connections:
-        if landmarks.landmark[start].visibility > 0.5 and landmarks.landmark[end].visibility > 0.5:
-            x1 = int(landmarks.landmark[start].x * w)
-            y1 = int(landmarks.landmark[start].y * h)
-            x2 = int(landmarks.landmark[end].x * w)
-            y2 = int(landmarks.landmark[end].y * h)
-            cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        if start < len(lm_list) and end < len(lm_list):
+            start_lm = lm_list[start]
+            end_lm = lm_list[end]
+            # Handle both visibility/presence attributes
+            start_vis = getattr(start_lm, 'visibility', getattr(start_lm, 'presence', 0.5))
+            end_vis = getattr(end_lm, 'visibility', getattr(end_lm, 'presence', 0.5))
+            
+            if start_vis > 0.5 and end_vis > 0.5:
+                x1 = int(start_lm.x * w)
+                y1 = int(start_lm.y * h)
+                x2 = int(end_lm.x * w)
+                y2 = int(end_lm.y * h)
+                cv2.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
     
     # Draw landmarks (joints)
-    for lm in landmarks.landmark:
-        if lm.visibility > 0.5:
+    for lm in lm_list:
+        vis = getattr(lm, 'visibility', getattr(lm, 'presence', 0.5))
+        if vis > 0.5:
             x = int(lm.x * w)
             y = int(lm.y * h)
             cv2.circle(frame, (x, y), 4, (0, 0, 255), -1)
 
 
 def draw_hand_skeleton(frame, landmarks, hand_side="right"):
-    """Draw hand skeleton on frame."""
+    """Draw hand skeleton on frame. Handles both old and Tasks API formats."""
     h, w, _ = frame.shape
+    
+    # Handle both landmark list formats (Tasks API returns list directly, old API uses .landmark)
+    lm_list = landmarks if isinstance(landmarks, list) else landmarks.landmark
     
     # Hand connections (21 points)
     connections = [
@@ -148,15 +165,15 @@ def draw_hand_skeleton(frame, landmarks, hand_side="right"):
     
     # Draw connections
     for start, end in connections:
-        if start < len(landmarks.landmark) and end < len(landmarks.landmark):
-            x1 = int(landmarks.landmark[start].x * w)
-            y1 = int(landmarks.landmark[start].y * h)
-            x2 = int(landmarks.landmark[end].x * w)
-            y2 = int(landmarks.landmark[end].y * h)
+        if start < len(lm_list) and end < len(lm_list):
+            x1 = int(lm_list[start].x * w)
+            y1 = int(lm_list[start].y * h)
+            x2 = int(lm_list[end].x * w)
+            y2 = int(lm_list[end].y * h)
             cv2.line(frame, (x1, y1), (x2, y2), (255, 0, 0), 1)
     
     # Draw landmarks
-    for lm in landmarks.landmark:
+    for lm in lm_list:
         x = int(lm.x * w)
         y = int(lm.y * h)
         cv2.circle(frame, (x, y), 3, (255, 0, 0), -1)
@@ -177,13 +194,18 @@ def main():
     
     print("✓ Camera initialized")
     
-    # Initialize MediaPipe Holistic
-    mp_holistic = mp.solutions.holistic
-    holistic = mp_holistic.Holistic(
-        static_image_mode=False,
-        model_complexity=1,
-        smooth_landmarks=True
+    # Initialize MediaPipe Holistic (Tasks API with downloaded model)
+    model_path = Path.home() / ".cache" / "mediapipe" / "holistic_landmarker.task"
+    if not model_path.exists():
+        print(f"Warning: Model not found at {model_path}")
+        print("Run: python download_model.py")
+        raise FileNotFoundError(f"Model file required: {model_path}")
+    
+    options = HolisticLandmarkerOptions(
+        base_options=base_options.BaseOptions(model_asset_path=str(model_path)),
+        running_mode=RunningMode.VIDEO
     )
+    holistic = HolisticLandmarker.create_from_options(options)
     
     print("✓ MediaPipe loaded")
     
@@ -214,6 +236,7 @@ def main():
     fps_start = time.time()
     frame_count = 0
     fps = 0
+    start_time = time.time()  # For video timestamp in Tasks API
     
     print("✓ Starting camera loop (press ESC to exit)...\n")
     
@@ -239,9 +262,11 @@ def main():
         skin_mask = get_skin_mask(frame_hsv)
         skin_mask = apply_morphology(skin_mask)
         
-        # Extract landmarks (MediaPipe)
+        # Extract landmarks (MediaPipe Tasks API - VIDEO mode)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = holistic.process(frame_rgb)
+        mp_image = MPImage(image_format=1, data=frame_rgb)  # Format 1 = RGB
+        timestamp_ms = int((time.time() - start_time) * 1000)
+        results = holistic.detect_for_video(mp_image, timestamp_ms)
         
         # Draw landmarks on frame (debug)
         if results.pose_landmarks:

@@ -14,11 +14,90 @@ from pathlib import Path
 
 from preprocessing import histogram_equalize, adaptive_blur, bgr_to_hsv
 from segmentation import get_skin_mask, apply_morphology, connected_component_analysis
-from hand_analysis import compute_finger_state, count_fingers
-from face_analysis import compute_head_tilt_angle, is_mouth_open
-from pose_analysis import is_hand_near_face, body_symmetry_score
-from meme_matcher import load_meme_config, match_best_meme
-from display import show_main_window, show_meme_popup, draw_landmarks, draw_debug_info
+from hand_analysis import compute_finger_state, count_fingers, compute_hand_angle, get_hand_shape_features
+from face_analysis import (compute_head_tilt_angle, is_mouth_open, compute_gaze_direction, 
+                           get_face_orientation, lip_to_nose_distance, lip_to_finger_distance, eye_aspect_ratio)
+from pose_analysis import (is_hand_near_face, body_symmetry_score, compute_shoulder_angle, 
+                          get_body_posture_vector, compute_arm_angle, hands_touching)
+from meme_matcher import load_meme_config, match_best_meme, evaluate_triggers, compute_confidence
+from display import show_main_window, show_meme_popup, draw_landmarks, draw_debug_info, close_meme_window, cleanup_windows
+
+
+def extract_all_features(results, skin_mask):
+    """
+    Extract all features from MediaPipe results for meme matching.
+    
+    Args:
+        results: MediaPipe Holistic results
+        skin_mask: Binary skin segmentation mask
+    
+    Returns:
+        Dict of all extracted features
+    """
+    features = {}
+    
+    # Hand features
+    if results.right_hand_landmarks:
+        features["fingers_extended_right"] = count_fingers(results.right_hand_landmarks, "right")
+        features["hand_near_face_right"] = is_hand_near_face(results.pose_landmarks, results.right_hand_landmarks)
+        features["hand_angle_right"] = compute_hand_angle(results.right_hand_landmarks)
+    else:
+        features["fingers_extended_right"] = 0
+        features["hand_near_face_right"] = False
+        features["hand_angle_right"] = 0.0
+    
+    if results.left_hand_landmarks:
+        features["fingers_extended_left"] = count_fingers(results.left_hand_landmarks, "left")
+        features["hand_near_face_left"] = is_hand_near_face(results.pose_landmarks, results.left_hand_landmarks)
+        features["hand_angle_left"] = compute_hand_angle(results.left_hand_landmarks)
+    else:
+        features["fingers_extended_left"] = 0
+        features["hand_near_face_left"] = False
+        features["hand_angle_left"] = 0.0
+    
+    # Total fingers
+    features["fingers_extended"] = features["fingers_extended_right"] + features["fingers_extended_left"]
+    
+    # Face features
+    if results.face_landmarks:
+        features["head_tilt_angle"] = compute_head_tilt_angle(results.face_landmarks)
+        features["mouth_open"], features["mouth_openness"] = is_mouth_open(results.face_landmarks)
+        features["gaze_direction"] = compute_gaze_direction(results.face_landmarks)
+        face_orient = get_face_orientation(results.face_landmarks)
+        features["face_yaw"] = face_orient["yaw"]
+        features["face_pitch"] = face_orient["pitch"]
+        features["face_roll"] = face_orient["roll"]
+        features["lip_to_nose_distance"] = lip_to_nose_distance(results.face_landmarks)
+        
+        # Lip to finger distance
+        if results.right_hand_landmarks:
+            features["lip_to_finger_distance_right"] = lip_to_finger_distance(results.face_landmarks, results.right_hand_landmarks)
+        else:
+            features["lip_to_finger_distance_right"] = 1.0
+        
+        if results.left_hand_landmarks:
+            features["lip_to_finger_distance_left"] = lip_to_finger_distance(results.face_landmarks, results.left_hand_landmarks)
+        else:
+            features["lip_to_finger_distance_left"] = 1.0
+        
+        features["eye_aspect_ratio"] = eye_aspect_ratio(results.face_landmarks)
+    
+    # Pose features
+    if results.pose_landmarks:
+        features["shoulder_angle"] = compute_shoulder_angle(results.pose_landmarks)
+        features["body_symmetry"] = body_symmetry_score(results.pose_landmarks)
+        posture = get_body_posture_vector(results.pose_landmarks)
+        features["posture_upright"] = posture.get("upright", False)
+        features["arm_angle_right"] = compute_arm_angle(results.pose_landmarks, "right")
+        features["arm_angle_left"] = compute_arm_angle(results.pose_landmarks, "left")
+    
+    # Hand interaction
+    if results.left_hand_landmarks and results.right_hand_landmarks:
+        features["hands_touching"] = hands_touching(results.left_hand_landmarks, results.right_hand_landmarks)
+    else:
+        features["hands_touching"] = False
+    
+    return features
 
 
 def draw_pose_skeleton(frame, landmarks):
@@ -169,10 +248,36 @@ def main():
         if meme_lock_frames > 0:
             meme_lock_frames -= 1
         else:
-            # Try to match new meme (placeholder for now)
-            pass
+            # Extract features and match meme
+            if results.pose_landmarks and (results.left_hand_landmarks or results.right_hand_landmarks or results.face_landmarks):
+                features = extract_all_features(results, skin_mask)
+                matched_meme, confidence = match_best_meme(features, meme_db)
+                
+                if matched_meme and confidence > 0.3:
+                    current_meme = matched_meme
+                    meme_lock_frames = MEME_LOCK_DURATION
+                    
+                    # Try to show meme
+                    meme_data = meme_db.get(matched_meme, {})
+                    meme_file = meme_data.get("image", "")
+                    meme_path = Path(__file__).parent.parent / "memes" / meme_file
+                    
+                    if meme_path.exists():
+                        show_meme_popup(meme_path)
+                    else:
+                        print(f"Warning: Meme file not found: {meme_path}")
         
         # Draw debug info
+        if meme_lock_frames > 0 and current_meme:
+            features = extract_all_features(results, skin_mask)
+            meme_data = meme_db.get(current_meme, {})
+            confidence = compute_confidence(features, meme_data.get("triggers", {}))
+            draw_debug_info(frame, features, current_meme, confidence)
+        else:
+            if results.pose_landmarks and (results.left_hand_landmarks or results.right_hand_landmarks or results.face_landmarks):
+                features = extract_all_features(results, skin_mask)
+                draw_debug_info(frame, features)
+        
         cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         cv2.putText(frame, f"Frame: {frame_count}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         

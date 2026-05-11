@@ -204,5 +204,29 @@ def get_feature_summary(features):
     Returns:
         String: Formatted summary
     """
-    # TODO: Extract key features and format nicely
-    return ""
+    if not features:
+        return ""
+    
+    parts = []
+    
+    # Key features to display
+    key_features = [
+        "fingers_extended",
+        "head_tilt_angle",
+        "mouth_open",
+        "hand_near_face",
+        "body_symmetry",
+        "arm_angle",
+    ]
+    
+    for key in key_features:
+        if key in features:
+            val = features[key]
+            if isinstance(val, float):
+                parts.append(f"{key}: {val:.1f}")
+            elif isinstance(val, bool):
+                parts.append(f"{key}: {val}")
+            else:
+                parts.append(f"{key}: {val}")
+    
+    return " | ".join(parts)

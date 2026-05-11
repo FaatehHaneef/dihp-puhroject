@@ -1,96 +1,205 @@
 {
-  "thinking_monkey": {
-    "image": "thinking_monkey.jpeg",
-    "features": {
-      "fingers_extended_right": 1,
-      "hand_near_face_right": true,
-      "mouth_open": true,
-      "mouth_openness": 0.15,
-      "head_tilt_angle": -5.0,
-      "shoulder_angle": 2.0,
-      "body_symmetry": 0.7
+  "crash_out": {
+    "image": "crash_out.gif",
+    "priority": 9,
+    "rules": {
+      "required": {
+        "both_hands_near_face": true,
+        "mouth_open": true
+      },
+      "optional": {
+        "any_hand_above_head": true,
+        "eyebrow_raise": ">0.32",
+        "mouth_state": {"in": ["open_round", "open_wide"]}
+      },
+      "forbidden": {}
     }
   },
-  "zesty": {
-    "image": "zesty.gif",
-    "features": {
-      "fingers_extended_right": 1,
-      "hand_near_face_right": true,
-      "mouth_open": true,
-      "mouth_openness": 0.25,
-      "head_tilt_angle": 10.0,
-      "shoulder_angle": 5.0,
-      "body_symmetry": 0.6
-    }
-  },
-  "drake_yes": {
-    "image": "drake_yes.jpg",
-    "features": {
-      "fingers_extended_right": 5,
-      "hand_near_face_right": false,
-      "mouth_open": false,
-      "head_tilt_angle": 0.0,
-      "shoulder_angle": 3.0,
-      "body_symmetry": 0.8
-    }
-  },
+
   "drake_no": {
     "image": "drake_no.jpg",
-    "features": {
-      "fingers_extended_right": 0,
-      "hand_near_face_right": false,
-      "mouth_open": false,
-      "head_tilt_angle": -15.0,
-      "shoulder_angle": 8.0,
-      "body_symmetry": 0.75
+    "priority": 5,
+    "rules": {
+      "required": {
+        "hand_count": 1,
+        "head_yaw": {"abs_gt": 10},
+        "mouth_open": false
+      },
+      "optional": {
+        "any_hand_near_face": false,
+        "fingers_extended": ">=2",
+        "any_hand_above_head": false
+      },
+      "forbidden": {
+        "is_smiling": true,
+        "any_finger_in_mouth": true,
+        "looking_at_camera": true
+      }
     }
   },
-  "woman_yelling_at_cat": {
-    "image": "woman_yelling_at_cat.jpg",
-    "features": {
-      "fingers_extended_right": 5,
-      "hand_near_face_right": false,
-      "mouth_open": true,
-      "mouth_openness": 0.2,
-      "head_tilt_angle": 5.0,
-      "shoulder_angle": 10.0,
-      "body_symmetry": 0.65
+
+  "drake_yes": {
+    "image": "drake_yes.jpg",
+    "priority": 5,
+    "rules": {
+      "required": {
+        "hand_count": 1,
+        "looking_at_camera": true,
+        "any_hand_pointing_forward": true
+      },
+      "optional": {
+        "is_smiling": true,
+        "fingers_extended": ">=1"
+      },
+      "forbidden": {
+        "any_finger_in_mouth": true,
+        "any_hand_above_head": true
+      }
     }
   },
+
+  "side_eye_chloe": {
+    "image": "archive/side_eye_chloe.jpeg",
+    "disabled": true,
+    "priority": 3,
+    "rules": {
+      "required": {
+        "head_tilt_angle": {"abs_gt": 15},
+        "looking_at_camera": true,
+        "eye_state": "wide",
+        "mouth_open": false
+      },
+      "optional": {
+        "hand_count": 0,
+        "is_smiling": false
+      },
+      "forbidden": {
+        "any_hand_near_face": true,
+        "any_finger_in_mouth": true,
+        "any_hand_above_head": true
+      }
+    }
+  },
+
+  "sparrow_influencer": {
+    "image": "sparrow_influencer.png",
+    "priority": 7,
+    "rules": {
+      "required": {
+        "any_hand_above_head": true,
+        "hand_count": 1
+      },
+      "optional": {
+        "looking_at_camera": true,
+        "any_hand_near_face": true,
+        "is_smiling": false
+      },
+      "forbidden": {
+        "any_finger_in_mouth": true,
+        "both_hands_near_face": true
+      }
+    }
+  },
+
   "surprised_pikachu": {
     "image": "surprised_pikachu.png",
-    "features": {
-      "fingers_extended_right": 2,
-      "hand_near_face_right": false,
-      "mouth_open": true,
-      "mouth_openness": 0.3,
-      "head_tilt_angle": 0.0,
-      "shoulder_angle": 2.0,
-      "body_symmetry": 0.85
+    "priority": 6,
+    "rules": {
+      "required": {
+        "mouth_state": "open_round",
+        "looking_at_camera": true,
+        "eye_state": {"in": ["wide", "normal"]}
+      },
+      "optional": {
+        "eyebrow_raise": ">0.30",
+        "hand_count": 0
+      },
+      "forbidden": {
+        "any_finger_in_mouth": true,
+        "any_arm_extended_sideways": true,
+        "any_hand_above_head": true
+      }
     }
   },
-  "side_eye_chloe": {
-    "image": "side_eye_chloe.jpeg",
-    "features": {
-      "fingers_extended_right": 3,
-      "hand_near_face_right": false,
-      "mouth_open": false,
-      "mouth_openness": 0.05,
-      "head_tilt_angle": 30.0,
-      "shoulder_angle": 5.0,
-      "body_symmetry": 0.8
-    }
-  },
+
   "suspicious_cat": {
-    "image": "suspicious_cat.jpg",
-    "features": {
-      "fingers_extended_right": 0,
-      "hand_near_face_right": false,
-      "mouth_open": false,
-      "mouth_openness": 0.02,
-      "head_tilt_angle": -20.0,
-      "shoulder_angle": 3.0,
-      "body_symmetry": 0.9
+    "image": "archive/suspicious_cat.jpg",
+    "disabled": true,
+    "priority": 4,
+    "rules": {
+      "required": {
+        "head_tilt_angle": {"abs_gt": 12},
+        "eye_state": "narrow",
+        "mouth_open": false,
+        "looking_at_camera": true
+      },
+      "optional": {
+        "eyebrow_raise": "<0.27",
+        "hand_count": 0
+      },
+      "forbidden": {
+        "any_hand_near_face": true,
+        "is_smiling": true,
+        "any_finger_in_mouth": true
+      }
+    }
+  },
+
+  "thinking_monkey": {
+    "image": "thinking_monkey.jpeg",
+    "priority": 8,
+    "rules": {
+      "required": {
+        "finger_in_mouth_right": true,
+        "hand_count": 1
+      },
+      "optional": {
+        "gaze_direction": "up",
+        "mouth_open": false
+      },
+      "forbidden": {
+        "both_hands_near_face": true,
+        "any_arm_extended_sideways": true,
+        "finger_in_mouth_left": true
+      }
+    }
+  },
+
+  "zesty": {
+    "image": "zesty.gif",
+    "priority": 8,
+    "rules": {
+      "required": {
+        "finger_in_mouth_left": true,
+        "hand_count": 1
+      },
+      "optional": {
+        "looking_at_camera": true,
+        "is_smiling": false
+      },
+      "forbidden": {
+        "both_hands_near_face": true,
+        "finger_in_mouth_right": true
+      }
+    }
+  },
+
+  "woman_yelling_at_cat": {
+    "image": "woman_yelling_at_cat.jpg",
+    "priority": 6,
+    "rules": {
+      "required": {
+        "mouth_state": {"in": ["open_wide", "open_neutral"]},
+        "any_arm_extended_sideways": true
+      },
+      "optional": {
+        "eyebrow_raise": "<0.30",
+        "fingers_extended": ">=2"
+      },
+      "forbidden": {
+        "any_finger_in_mouth": true,
+        "any_hand_above_head": true
+      }
     }
   }
 }

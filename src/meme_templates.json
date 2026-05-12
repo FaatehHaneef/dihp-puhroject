@@ -201,5 +201,26 @@
         "any_hand_above_head": true
       }
     }
+  },
+
+  "absolute_cinema": {
+    "image": "absolute_cinema.png",
+    "priority": 6,
+    "rules": {
+      "required": {
+        "arms_raised": true,
+        "any_hand_above_head": true,
+        "mouth_state": "closed",
+        "is_smiling": false
+      },
+      "optional": {
+        "looking_at_camera": true,
+        "hand_count": 2
+      },
+      "forbidden": {
+        "any_finger_in_mouth": true,
+        "mouth_open": true
+      }
+    }
   }
 }

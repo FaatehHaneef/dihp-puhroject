@@ -58,6 +58,30 @@
     }
   },
 
+  "facepalm": {
+    "image": "facepalm.png",
+    "priority": 8,
+    "rules": {
+      "required": {
+        "any_hand_near_face": true,
+        "hand_count": 1,
+        "looking_at_camera": false,
+        "mouth_open": false
+      },
+      "optional": {
+        "any_hand_above_head": false,
+        "head_tilt_angle": {"abs_gt": 10},
+        "is_smiling": false
+      },
+      "forbidden": {
+        "any_hand_pointing_forward": true,
+        "is_smiling": true,
+        "fingers_extended": ">=1",
+        "head_yaw": {"abs_gt": 45}
+      }
+    }
+  },
+
   "side_eye_chloe": {
     "image": "archive/side_eye_chloe.jpeg",
     "disabled": true,

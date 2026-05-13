@@ -38,6 +38,9 @@ python -c "import cv2, numpy, mediapipe; print('✓ All ready')"
 - Pose/hand/face landmark extraction (skeleton provider only)
 - First run downloads ~150MB models to `~/.cache/mediapipe/`
 
+### Windows audio
+- Uses built-in Windows MCI (winmm); supports .wav/.mp3/.m4a in audios/
+
 ## OPTIONAL DEPENDENCIES
 
 ### pytest

@@ -8,12 +8,21 @@ Phase 1: Foundation — Camera loop, preprocessing, segmentation, landmark overl
 import cv2
 import json
 import time
+import threading
+import platform
+import ctypes
+from ctypes import create_unicode_buffer
 import numpy as np
 from pathlib import Path
 from mediapipe.tasks.python.vision import HolisticLandmarker, HolisticLandmarkerOptions, RunningMode
 from mediapipe.tasks.python.core import base_options
 from mediapipe import Image as MPImage
 import mediapipe as mp
+
+if platform.system().lower() == "windows":
+    _winmm = ctypes.WinDLL("winmm")
+else:
+    _winmm = None
 
 from preprocessing import histogram_equalize, adaptive_blur, bgr_to_hsv
 from segmentation import get_skin_mask, apply_morphology, connected_component_analysis
@@ -31,6 +40,43 @@ from meme_matcher import (load_meme_config, match_best_meme, evaluate_triggers, 
                          match_best_meme_by_template)
 from display import (show_main_window, show_meme_popup, draw_landmarks, draw_debug_info,
                      close_meme_window, cleanup_windows, overlay_meme_on_frame, clear_overlay_cache)
+
+
+def _mci_send(command):
+    buffer = create_unicode_buffer(255)
+    error = _winmm.mciSendStringW(command, buffer, 254, 0)
+    return error, buffer.value
+
+
+def _mci_error(error):
+    buffer = create_unicode_buffer(255)
+    _winmm.mciGetErrorStringW(error, buffer, 254)
+    return buffer.value
+
+
+def _play_audio(paths, state):
+    try:
+        if _winmm is None:
+            raise RuntimeError("Windows audio not available")
+        last_error = ""
+        for path in paths:
+            alias = f"meme_{int(time.time() * 1000)}"
+            err, _ = _mci_send(f'open "{path}" alias {alias}')
+            if err:
+                last_error = _mci_error(err)
+                _mci_send(f"close {alias}")
+                continue
+            err, _ = _mci_send(f"play {alias} wait")
+            _mci_send(f"close {alias}")
+            if err:
+                last_error = _mci_error(err)
+                continue
+            state["playing"] = False
+            return
+        raise RuntimeError(last_error or "No playable audio file found")
+    except Exception as exc:
+        print(f"Warning: Failed to play audio: {exc}")
+    state["playing"] = False
 
 
 def extract_all_features(results, skin_mask):
@@ -315,6 +361,11 @@ def main():
     current_meme_path = None
     meme_lock_frames = 0
     MEME_LOCK_DURATION = 20  # ~0.7 seconds at 30fps — shorter so stale memes clear quickly
+
+    # Audio playback state
+    audio_dir = Path(__file__).parent.parent / "audios"
+    audio_state = {"playing": False}
+    missing_audio_warned = set()
     
     # FPS tracking
     fps_start = time.time()
@@ -371,15 +422,17 @@ def main():
 
         features = extract_all_features(results, skin_mask) if has_any else None
 
+        audio_playing = audio_state["playing"]
+
         # Update meme lock
-        if meme_lock_frames > 0:
+        if meme_lock_frames > 0 and not audio_playing:
             meme_lock_frames -= 1
             if meme_lock_frames == 0:
                 # Lock expired — clear current meme so debug overlay stops showing stale name
                 current_meme = None
                 current_meme_path = None
                 clear_overlay_cache()
-        elif features is not None:
+        elif features is not None and not audio_playing:
             matched_meme, confidence = match_best_meme_by_template(features, meme_templates, threshold=0.55)
 
             if matched_meme:
@@ -396,6 +449,24 @@ def main():
                 else:
                     current_meme_path = None
                     print(f"Warning: Meme file not found: {meme_path}")
+
+                audio_paths = []
+                for ext in (".wav", ".mp3", ".m4a"):
+                    candidate = audio_dir / f"{matched_meme}{ext}"
+                    if candidate.exists():
+                        audio_paths.append(candidate)
+
+                if audio_paths:
+                    audio_state["playing"] = True
+                    thread = threading.Thread(
+                        target=_play_audio,
+                        args=(audio_paths, audio_state),
+                        daemon=True,
+                    )
+                    thread.start()
+                elif matched_meme not in missing_audio_warned:
+                    print(f"Warning: Audio file not found: {audio_paths}")
+                    missing_audio_warned.add(matched_meme)
 
         # In-frame meme overlay (top-right corner)
         if current_meme_path is not None and meme_lock_frames > 0:

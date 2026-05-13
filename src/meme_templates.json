@@ -287,5 +287,28 @@
         "mouth_open": false
       }
     }
+  },
+
+  "behzinga": {
+    "image": "behzinga.png",
+    "priority": 7,
+    "rules": {
+      "required": {
+        "mouth_open": true,
+        "mouth_state": {"in": ["open_neutral", "open_wide"]},
+        "is_smiling": false,
+        "eye_state": {"in": ["wide", "normal"]}
+      },
+      "optional": {
+        "looking_at_camera": true,
+        "eyebrow_raise": ">0.30",
+        "head_tilt_angle": {"abs_lt": 10}
+      },
+      "forbidden": {
+        "mouth_state": "open_round",
+        "any_hand_near_face": true,
+        "any_finger_in_mouth": true
+      }
+    }
   }
 }

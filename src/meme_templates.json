@@ -4,15 +4,18 @@
     "priority": 9,
     "rules": {
       "required": {
+        "hand_count": 2,
         "both_hands_near_face": true,
         "mouth_open": true
       },
       "optional": {
-        "any_hand_above_head": true,
         "eyebrow_raise": ">0.32",
         "mouth_state": {"in": ["open_round", "open_wide"]}
       },
-      "forbidden": {}
+      "forbidden": {
+        "any_finger_in_mouth": true,
+        "any_hand_above_head": true
+      }
     }
   },
 

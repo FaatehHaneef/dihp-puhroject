@@ -82,25 +82,41 @@
   },
 
   "sparrow_influencer": {
-    "image": "image_47e559.jpg",
+
+    "image": "sparrow_influencer.png",
+
     "priority": 7,
+
     "rules": {
+
       "required": {
+
         "any_hand_above_head": true,
-        "hand_count": 1,
-        "looking_at_camera": true
+
+        "hand_count": 1
+
       },
+
       "optional": {
+
+        "looking_at_camera": true,
+
         "any_hand_near_face": true,
-        "is_smiling": false,
-        "mouth_open": false
+
+        "is_smiling": false
+
       },
+
       "forbidden": {
+
         "any_finger_in_mouth": true,
-        "both_hands_near_face": true,
-        "arms_raised": false
+
+        "both_hands_near_face": true
+
       }
+
     }
+
   },
 
   "surprised_pikachu": {

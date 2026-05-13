@@ -55,6 +55,19 @@ def extract_all_features(results, skin_mask):
     f["right_hand_visible"] = rh is not None
     f["left_hand_visible"] = lh is not None
 
+    # ---- segmentation stats (skin mask) ----
+    if skin_mask is not None:
+        total_pixels = skin_mask.size
+        skin_pixels = int(np.count_nonzero(skin_mask))
+        f["skin_coverage"] = (skin_pixels / total_pixels) if total_pixels else 0.0
+        _, num_labels, _, blob_sizes = connected_component_analysis(skin_mask)
+        f["skin_blob_count"] = max(0, num_labels - 1)
+        f["skin_largest_blob_ratio"] = (max(blob_sizes) / total_pixels) if (blob_sizes.size > 0 and total_pixels) else 0.0
+    else:
+        f["skin_coverage"] = 0.0
+        f["skin_blob_count"] = 0
+        f["skin_largest_blob_ratio"] = 0.0
+
     # ---- per-hand low-level ----
     if rh:
         f["fingers_extended_right"] = count_fingers(rh, "right")
@@ -326,7 +339,8 @@ def main():
             fps_start = time.time()
         
         # Preprocess
-        frame_blur = adaptive_blur(frame)
+        frame_eq = histogram_equalize(frame)
+        frame_blur = adaptive_blur(frame_eq)
         frame_hsv = bgr_to_hsv(frame_blur)
         
         # Segment skin

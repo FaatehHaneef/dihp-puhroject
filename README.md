@@ -73,6 +73,19 @@ All features calculated from MediaPipe landmarks (NO machine learning):
 - `hand_near_face_left/right`: boolean
 - Plus 10+ more...
 
+### DIP Concepts Used (Mapped to Lectures)
+
+- **Digital image basics & resolution**: camera frames treated as sampled images (Lect-1-2)
+- **Color models / conversion**: BGR→HSV and BGR→YCrCb for segmentation and lighting normalization (Lect-10)
+- **Histogram equalization & intensity normalization**: luminance equalization before segmentation (Lect-4-1, Lect-4-2)
+- **Spatial filtering**: Gaussian blur for noise reduction (Lect-5)
+- **Segmentation by thresholding**: HSV skin mask (Lect-7)
+- **Morphological operations**: opening/closing/dilation to clean the mask (Lect-8, Lect-9)
+- **Connected components**: blob counts/areas from the skin mask (Lect-2)
+- **Feature extraction & spatial relationships**: angles, ratios, symmetry, proximity (Lect-3-1)
+
+Concepts like compression/coding and full object detection are not forced here because they are not necessary for this rule-based, real-time pose-to-meme pipeline.
+
 ### Meme Database
 
 8 memes with feature templates:

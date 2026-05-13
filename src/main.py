@@ -13,6 +13,7 @@ import platform
 import ctypes
 from ctypes import create_unicode_buffer
 import numpy as np
+from collections import Counter, deque
 from pathlib import Path
 from mediapipe.tasks.python.vision import HolisticLandmarker, HolisticLandmarkerOptions, RunningMode
 from mediapipe.tasks.python.core import base_options
@@ -77,6 +78,41 @@ def _play_audio(paths, state):
     except Exception as exc:
         print(f"Warning: Failed to play audio: {exc}")
     state["playing"] = False
+
+
+def _smooth_features(feature_window):
+    if not feature_window:
+        return None
+    keys = set()
+    for f in feature_window:
+        keys.update(f.keys())
+    smoothed = {}
+    for key in keys:
+        values = [f.get(key) for f in feature_window if key in f]
+        values = [v for v in values if v is not None]
+        if not values:
+            continue
+        if all(isinstance(v, bool) for v in values):
+            smoothed[key] = sum(values) >= (len(values) / 2)
+        elif all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+            smoothed[key] = float(sum(values)) / len(values)
+        elif all(isinstance(v, str) for v in values):
+            smoothed[key] = Counter(values).most_common(1)[0][0]
+        else:
+            smoothed[key] = values[-1]
+    return smoothed
+
+
+def _stable_match(history, min_hits):
+    if not history:
+        return None
+    counts = Counter([m for m in history if m])
+    if not counts:
+        return None
+    name, count = counts.most_common(1)[0]
+    if count >= min_hits and history[-1] == name:
+        return name
+    return None
 
 
 def extract_all_features(results, skin_mask):
@@ -362,6 +398,12 @@ def main():
     meme_lock_frames = 0
     MEME_LOCK_DURATION = 20  # ~0.7 seconds at 30fps — shorter so stale memes clear quickly
 
+    # Temporal smoothing and stability
+    feature_window = deque(maxlen=6)
+    match_history = deque(maxlen=6)
+    MIN_FEATURE_FRAMES = 3
+    MIN_STABLE_HITS = 4
+
     # Audio playback state
     audio_dir = Path(__file__).parent.parent / "audios"
     audio_state = {"playing": False}
@@ -421,6 +463,13 @@ def main():
                    or results.pose_landmarks)
 
         features = extract_all_features(results, skin_mask) if has_any else None
+        if features is not None:
+            feature_window.append(features)
+        else:
+            feature_window.clear()
+            match_history.clear()
+
+        match_features = _smooth_features(feature_window) if len(feature_window) >= MIN_FEATURE_FRAMES else None
 
         audio_playing = audio_state["playing"]
 
@@ -432,14 +481,17 @@ def main():
                 current_meme = None
                 current_meme_path = None
                 clear_overlay_cache()
-        elif features is not None and not audio_playing:
-            matched_meme, confidence = match_best_meme_by_template(features, meme_templates, threshold=0.55)
+        elif match_features is not None and not audio_playing:
+            matched_meme, confidence = match_best_meme_by_template(match_features, meme_templates, threshold=0.55)
+            match_history.append(matched_meme)
+            stable_meme = _stable_match(match_history, MIN_STABLE_HITS)
 
-            if matched_meme:
+            if stable_meme:
                 current_meme = matched_meme
                 meme_lock_frames = MEME_LOCK_DURATION
+                match_history.clear()
 
-                template = meme_templates.get(matched_meme, {})
+                template = meme_templates.get(current_meme, {})
                 meme_file = template.get("image", "")
                 meme_path = Path(__file__).parent.parent / "memes" / meme_file
 
@@ -452,7 +504,7 @@ def main():
 
                 audio_paths = []
                 for ext in (".wav", ".mp3", ".m4a"):
-                    candidate = audio_dir / f"{matched_meme}{ext}"
+                    candidate = audio_dir / f"{current_meme}{ext}"
                     if candidate.exists():
                         audio_paths.append(candidate)
 
@@ -464,9 +516,9 @@ def main():
                         daemon=True,
                     )
                     thread.start()
-                elif matched_meme not in missing_audio_warned:
+                elif current_meme not in missing_audio_warned:
                     print(f"Warning: Audio file not found: {audio_paths}")
-                    missing_audio_warned.add(matched_meme)
+                    missing_audio_warned.add(current_meme)
 
         # In-frame meme overlay (top-right corner)
         if current_meme_path is not None and meme_lock_frames > 0:
@@ -477,7 +529,8 @@ def main():
             if meme_lock_frames > 0 and current_meme:
                 from meme_matcher import score_meme
                 rules = meme_templates.get(current_meme, {}).get("rules", {})
-                _, lock_score = score_meme(features, rules)
+                score_features = match_features or features
+                _, lock_score = score_meme(score_features, rules)
                 draw_debug_info(frame, features, current_meme, lock_score)
             else:
                 draw_debug_info(frame, features)

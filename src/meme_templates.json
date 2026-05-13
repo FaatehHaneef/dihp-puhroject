@@ -133,6 +133,7 @@
         "hand_count": 0
       },
       "forbidden": {
+        "is_smiling": true,
         "any_finger_in_mouth": true,
         "any_arm_extended_sideways": true,
         "any_hand_above_head": true
@@ -238,6 +239,28 @@
       "forbidden": {
         "any_finger_in_mouth": true,
         "mouth_open": true
+      }
+    }
+  },
+
+  "kendrick_mustard": {
+    "image": "kendrick_mustard.png",
+    "priority": 9,
+    "rules": {
+      "required": {
+        "mouth_open": true,
+        "mouth_state": {"in": ["open_wide", "open_neutral"]},
+        "is_smiling": true
+      },
+      "optional": {
+        "looking_at_camera": true,
+        "eyebrow_raise": ">0.35",
+        "head_tilt_angle": {"abs_lt": 8}
+      },
+      "forbidden": {
+        "any_hand_near_face": true,
+        "any_finger_in_mouth": true,
+        "mouth_open": false
       }
     }
   }

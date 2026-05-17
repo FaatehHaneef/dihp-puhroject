@@ -25,11 +25,13 @@ if platform.system().lower() == "windows":
 else:
     _winmm = None
 
-from preprocessing import histogram_equalize, adaptive_blur, bgr_to_hsv
-from segmentation import get_skin_mask, apply_morphology, connected_component_analysis
+from preprocessing import (histogram_equalize, adaptive_blur, bgr_to_hsv,
+                           histogram_equalizer, adaptive_blur_manual, bgr_to_hsv_func)
+from segmentation import (get_skin_mask, apply_morphology, connected_component_analysis,
+                          get_skin_mask_func, apply_morphology_manual,
+                          connected_component_analysis_func)
 from hand_analysis import (compute_finger_state, count_fingers, compute_hand_angle,
-                           get_hand_shape_features, is_hand_pointing_forward,
-                           is_hand_above_head, is_finger_in_mouth)
+                           is_hand_pointing_forward, is_hand_above_head, is_finger_in_mouth)
 from face_analysis import (compute_head_tilt_angle, is_mouth_open, compute_gaze_direction,
                            get_face_orientation, lip_to_nose_distance, lip_to_finger_distance, eye_aspect_ratio,
                            mouth_aspect_ratio, classify_mouth_state, is_smiling,
@@ -40,7 +42,9 @@ from pose_analysis import (is_hand_near_face, body_symmetry_score, compute_shoul
 from meme_matcher import (load_meme_config, match_best_meme, evaluate_triggers, compute_confidence,
                          match_best_meme_by_template)
 from display import (show_main_window, show_meme_popup, draw_landmarks, draw_debug_info,
-                     close_meme_window, cleanup_windows, overlay_meme_on_frame, clear_overlay_cache)
+                     close_meme_window, cleanup_windows, overlay_meme_on_frame, clear_overlay_cache,
+                     overlay_video_on_frame, clear_video_cache)
+boolvar = False
 
 
 def _mci_send(command):
@@ -142,7 +146,8 @@ def extract_all_features(results, skin_mask):
         total_pixels = skin_mask.size
         skin_pixels = int(np.count_nonzero(skin_mask))
         f["skin_coverage"] = (skin_pixels / total_pixels) if total_pixels else 0.0
-        _, num_labels, _, blob_sizes = connected_component_analysis(skin_mask)
+        cca = connected_component_analysis_func if boolvar else connected_component_analysis
+        _, num_labels, _, blob_sizes = cca(skin_mask)
         f["skin_blob_count"] = max(0, num_labels - 1)
         f["skin_largest_blob_ratio"] = (max(blob_sizes) / total_pixels) if (blob_sizes.size > 0 and total_pixels) else 0.0
     else:
@@ -395,6 +400,7 @@ def main():
     # Meme popup state (debouncing)
     current_meme = None
     current_meme_path = None
+    current_meme_is_video = False
     meme_lock_frames = 0
     MEME_LOCK_DURATION = 20  # ~0.7 seconds at 30fps — shorter so stale memes clear quickly
 
@@ -431,14 +437,18 @@ def main():
             fps = 30 / elapsed
             fps_start = time.time()
         
-        # Preprocess
-        frame_eq = histogram_equalize(frame)
-        frame_blur = adaptive_blur(frame_eq)
-        frame_hsv = bgr_to_hsv(frame_blur)
-        
-        # Segment skin
-        skin_mask = get_skin_mask(frame_hsv)
-        skin_mask = apply_morphology(skin_mask)
+        if boolvar:
+            frame_eq = histogram_equalizer(frame)
+            frame_blur = adaptive_blur_manual(frame_eq)
+            frame_hsv = bgr_to_hsv_func(frame_blur)
+            skin_mask = get_skin_mask_func(frame_hsv)
+            skin_mask = apply_morphology_manual(skin_mask)
+        else:
+            frame_eq = histogram_equalize(frame)
+            frame_blur = adaptive_blur(frame_eq)
+            frame_hsv = bgr_to_hsv(frame_blur)
+            skin_mask = get_skin_mask(frame_hsv)
+            skin_mask = apply_morphology(skin_mask)
         
         # Extract landmarks (MediaPipe Tasks API - VIDEO mode)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -480,7 +490,9 @@ def main():
                 # Lock expired — clear current meme so debug overlay stops showing stale name
                 current_meme = None
                 current_meme_path = None
+                current_meme_is_video = False
                 clear_overlay_cache()
+                clear_video_cache()
         elif match_features is not None and not audio_playing:
             matched_meme, confidence = match_best_meme_by_template(match_features, meme_templates, threshold=0.55)
             match_history.append(matched_meme)
@@ -492,12 +504,23 @@ def main():
                 match_history.clear()
 
                 template = meme_templates.get(current_meme, {})
-                meme_file = template.get("image", "")
-                meme_path = Path(__file__).parent.parent / "memes" / meme_file
+                # Video memes take precedence over image when both are declared.
+                video_file = template.get("video")
+                image_file = template.get("image")
+                if video_file:
+                    meme_path = Path(__file__).parent.parent / "memes" / video_file
+                    current_meme_is_video = True
+                elif image_file:
+                    meme_path = Path(__file__).parent.parent / "memes" / image_file
+                    current_meme_is_video = False
+                else:
+                    meme_path = None
+                    current_meme_is_video = False
 
-                if meme_path.exists():
+                if meme_path is not None and meme_path.exists():
                     current_meme_path = meme_path
-                    clear_overlay_cache()  # force reload for new meme
+                    clear_overlay_cache()
+                    clear_video_cache()  # force fresh capture / image reload
                 else:
                     current_meme_path = None
                     print(f"Warning: Meme file not found: {meme_path}")
@@ -520,9 +543,12 @@ def main():
                     print(f"Warning: Audio file not found: {audio_paths}")
                     missing_audio_warned.add(current_meme)
 
-        # In-frame meme overlay (top-right corner)
+        # In-frame meme overlay (top-right corner) — image or video
         if current_meme_path is not None and meme_lock_frames > 0:
-            overlay_meme_on_frame(frame, current_meme_path)
+            if current_meme_is_video:
+                overlay_video_on_frame(frame, current_meme_path)
+            else:
+                overlay_meme_on_frame(frame, current_meme_path)
 
         # Draw debug info (consolidated panel layout)
         system_info = {

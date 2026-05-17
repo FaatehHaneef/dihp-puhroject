@@ -1,21 +1,10 @@
 """
-Meme Matcher — Rule-based scoring engine.
+Meme Matcher — rule scoring engine for meme_templates.json.
 
-Each meme in meme_templates.json declares:
-  "rules": {
-      "required": { feature_name: condition, ... },   # ALL must match for the meme to be eligible
-      "optional": { feature_name: condition, ... },   # each match adds bonus score
-      "forbidden": { feature_name: condition, ... }   # ANY match disqualifies the meme
-  }
-
-Condition formats:
-  - bool                   : exact equality
-  - "value"                : exact equality (strings, e.g. mouth_state == "open_round")
-  - ">N" / "<N" / ">=N" / "<=N" / "==N" : numeric comparisons
-  - {"in": [a, b, c]}      : value must be in list
-  - {"between": [lo, hi]}  : lo <= value <= hi
-  - {"abs_gt": N}          : abs(value) > N
-  - {"abs_lt": N}          : abs(value) < N
+Each meme rule has `required` (all must match), `optional` (each match adds score),
+and `forbidden` (any match disqualifies). Conditions support bool/string equality,
+numeric operators (">N", "<=N", ...), and dict forms ({"in": [...]}, {"between": [lo,hi]},
+{"abs_gt": N}, {"abs_lt": N}).
 """
 
 import json

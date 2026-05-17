@@ -59,12 +59,6 @@ def overlay_meme_on_frame(frame, meme_path, max_w=320, max_h=320, margin=15):
     # Border + paste
     cv2.rectangle(frame, (x1 - 2, y1 - 2), (x2 + 2, y2 + 2), (255, 255, 255), 2)
     frame[y1:y2, x1:x2] = meme_img
-
-    # Caption strip
-    label_path = Path(meme_path).stem
-    cv2.rectangle(frame, (x1, y2 - 28), (x2, y2), (0, 0, 0), -1)
-    cv2.putText(frame, label_path, (x1 + 6, y2 - 8),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1)
     return True
 
 
@@ -136,50 +130,145 @@ def draw_landmarks(frame, landmarks, landmark_type="pose"):
         cv2.circle(frame, (x, y), 3, color, -1)
 
 
-def draw_debug_info(frame, features, matched_meme=None, confidence=0.0):
+def _draw_panel(frame, x, y, w, h, alpha=0.55):
+    """Translucent dark panel with thin border."""
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x, y), (x + w, y + h), (15, 15, 15), -1)
+    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+    cv2.rectangle(frame, (x, y), (x + w, y + h), (90, 90, 90), 1)
+
+
+def _draw_section(frame, x, y, w, title, rows, title_color=(0, 200, 255)):
     """
-    Draw debug text overlays on the frame.
-    
+    Draw a labelled section with header strip and rows.
+
+    rows: list of (label, value, color) tuples. If label is None, the
+    value is rendered alone (used for event chips/badges).
+    Returns the y-coord of the section bottom.
+    """
+    pad_x = 12
+    line_h = 20
+    title_h = 26
+    bottom_pad = 8
+    h = title_h + len(rows) * line_h + bottom_pad
+
+    _draw_panel(frame, x, y, w, h)
+
+    # Header strip
+    cv2.rectangle(frame, (x, y), (x + w, y + title_h), (35, 35, 35), -1)
+    cv2.line(frame, (x, y + title_h), (x + w, y + title_h), (90, 90, 90), 1)
+    cv2.putText(frame, title, (x + pad_x, y + 18),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, title_color, 1, cv2.LINE_AA)
+
+    for i, row in enumerate(rows):
+        label, value, color = row
+        text = f"{label}: {value}" if label else str(value)
+        y_pos = y + title_h + i * line_h + 16
+        cv2.putText(frame, text, (x + pad_x, y_pos),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+
+    return y + h
+
+
+def _draw_meme_banner(frame, matched_meme, confidence):
+    """Bottom-center banner showing the matched meme and a confidence bar."""
+    fh, fw, _ = frame.shape
+    bw = 360
+    bh = 56
+    x = (fw - bw) // 2
+    y = fh - bh - 18
+
+    _draw_panel(frame, x, y, bw, bh, alpha=0.70)
+
+    # Header strip
+    cv2.rectangle(frame, (x, y), (x + bw, y + 22), (40, 40, 40), -1)
+    cv2.putText(frame, "MATCHED MEME", (x + 10, y + 16),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 200, 255), 1, cv2.LINE_AA)
+
+    # Meme name
+    cv2.putText(frame, matched_meme, (x + 10, y + 42),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 1, cv2.LINE_AA)
+
+    # Confidence bar (right side of banner)
+    bar_x1 = x + bw - 110
+    bar_x2 = x + bw - 12
+    bar_y1 = y + 36
+    bar_y2 = y + 48
+    cv2.rectangle(frame, (bar_x1, bar_y1), (bar_x2, bar_y2), (60, 60, 60), 1)
+    fill = int((bar_x2 - bar_x1) * max(0.0, min(1.0, confidence)))
+    cv2.rectangle(frame, (bar_x1, bar_y1), (bar_x1 + fill, bar_y2),
+                  (0, 255, 100), -1)
+    cv2.putText(frame, f"{confidence:.0%}", (bar_x1, bar_y1 - 4),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (220, 220, 220), 1, cv2.LINE_AA)
+
+
+def draw_debug_info(frame, features, matched_meme=None, confidence=0.0,
+                    system_info=None):
+    """
+    Draw debug overlay as stacked panels on the left and a meme banner
+    at the bottom. Eliminates the old overlapping text layout.
+
     Args:
         frame: BGR frame to draw on (modified in-place)
         features: Dict of extracted features
         matched_meme: Name of matched meme (or None)
         confidence: Confidence score (0-1)
+        system_info: Optional dict with keys 'fps', 'frame', 'pose_detected'
     """
     if features is None:
         features = {}
-    
-    h, w, _ = frame.shape
-    
-    # Text position and font
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.6
-    thickness = 1
-    color = (0, 255, 0)
-    y_offset = 30
-    x_pos = 10
-    
-    def line(text, col=color):
-        nonlocal y_offset
-        cv2.putText(frame, text, (x_pos, y_offset), font, font_scale, col, thickness)
-        y_offset += 22
+    system_info = system_info or {}
 
-    line(f"Hands: {features.get('hand_count', 0)}  Fingers: {features.get('fingers_extended', 0)}")
-    line(f"Mouth: {features.get('mouth_state', '?')}  Smile: {features.get('is_smiling', False)}")
-    line(f"Eyes: {features.get('eye_state', '?')}")
-    line(f"Gaze: {features.get('gaze_direction', '?')}  AtCam: {features.get('looking_at_camera', False)}")
-    line(f"Tilt: {features.get('head_tilt_angle', 0.0):.1f}  Yaw: {features.get('head_yaw', 0.0):.1f}")
-    if features.get("any_finger_in_mouth"):
-        line("FingerInMouth", (0, 200, 255))
-    if features.get("any_hand_above_head"):
-        line("HandAboveHead", (0, 200, 255))
-    if features.get("any_hand_pointing_forward"):
-        line("PointingFwd", (0, 200, 255))
-    if features.get("any_arm_extended_sideways"):
-        line("ArmSideways", (0, 200, 255))
+    panel_x = 10
+    panel_y = 10
+    panel_w = 230
+    gap = 8
+    green = (0, 255, 120)
+    white = (230, 230, 230)
+    yellow = (0, 230, 255)
+    orange = (0, 165, 255)
 
+    # ---- SYSTEM panel ----
+    system_rows = [
+        ("FPS",   f"{system_info.get('fps', 0.0):.1f}",         green),
+        ("Frame", f"{system_info.get('frame', 0)}",             white),
+        ("Pose",  "Detected" if system_info.get('pose_detected') else "—",
+                  green if system_info.get('pose_detected') else (120, 120, 120)),
+    ]
+    bottom = _draw_section(frame, panel_x, panel_y, panel_w, "SYSTEM", system_rows)
+
+    # ---- FACE panel ----
+    face_rows = [
+        ("Mouth",  features.get("mouth_state", "?"),    white),
+        ("Smile",  str(features.get("is_smiling", False)), white),
+        ("Eyes",   features.get("eye_state", "?"),      white),
+        ("Gaze",   features.get("gaze_direction", "?"), white),
+        ("AtCam",  str(features.get("looking_at_camera", False)), white),
+        ("Tilt",   f"{features.get('head_tilt_angle', 0.0):.1f}°", white),
+        ("Yaw",    f"{features.get('head_yaw', 0.0):.1f}°",        white),
+    ]
+    bottom = _draw_section(frame, panel_x, bottom + gap, panel_w, "FACE", face_rows)
+
+    # ---- HANDS panel ----
+    hand_rows = [
+        ("Count",   str(features.get("hand_count", 0)),       white),
+        ("Fingers", str(features.get("fingers_extended", 0)), white),
+    ]
+    events = []
+    if features.get("any_finger_in_mouth"):       events.append("FingerInMouth")
+    if features.get("any_hand_above_head"):       events.append("HandAboveHead")
+    if features.get("any_hand_pointing_forward"): events.append("PointingFwd")
+    if features.get("any_arm_extended_sideways"): events.append("ArmSideways")
+    if events:
+        hand_rows.append((None, " | ".join(events), orange))
+    else:
+        hand_rows.append((None, "(no events)", (120, 120, 120)))
+
+    _draw_section(frame, panel_x, bottom + gap, panel_w, "HANDS", hand_rows)
+
+    # ---- MEME banner (bottom-center) ----
     if matched_meme:
-        line(f"Meme: {matched_meme} ({confidence:.0%})", (0, 0, 255))
+        _draw_meme_banner(frame, matched_meme, confidence)
 
 
 def show_main_window(frame, window_name="PoseMeme"):

@@ -524,22 +524,24 @@ def main():
         if current_meme_path is not None and meme_lock_frames > 0:
             overlay_meme_on_frame(frame, current_meme_path)
 
-        # Draw debug info
+        # Draw debug info (consolidated panel layout)
+        system_info = {
+            "fps": fps,
+            "frame": frame_count,
+            "pose_detected": results.pose_landmarks is not None,
+        }
         if features is not None:
             if meme_lock_frames > 0 and current_meme:
                 from meme_matcher import score_meme
                 rules = meme_templates.get(current_meme, {}).get("rules", {})
                 score_features = match_features or features
                 _, lock_score = score_meme(score_features, rules)
-                draw_debug_info(frame, features, current_meme, lock_score)
+                draw_debug_info(frame, features, current_meme, lock_score, system_info)
             else:
-                draw_debug_info(frame, features)
-        
-        cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(frame, f"Frame: {frame_count}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        if results.pose_landmarks:
-            cv2.putText(frame, "Pose: Detected", (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                draw_debug_info(frame, features, system_info=system_info)
+        else:
+            # No features yet, but still show system panel
+            draw_debug_info(frame, {}, system_info=system_info)
         
         # Display main window
         cv2.imshow("DIP Project - Live Pose Detection", frame)

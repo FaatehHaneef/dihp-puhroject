@@ -20,7 +20,8 @@
   },
 
   "drake_no": {
-    "image": "drake_no.jpg",
+    "image": "archive/drake_no.jpg",
+    "disabled": true,
     "priority": 5,
     "rules": {
       "required": {
@@ -231,7 +232,8 @@
   },
 
   "woman_yelling_at_cat": {
-    "image": "woman_yelling_at_cat.jpg",
+    "image": "archive/woman_yelling_at_cat.jpg",
+    "disabled": true,
     "priority": 6,
     "rules": {
       "required": {
